@@ -73,8 +73,8 @@
     <TypeScriptCompileOnSaveEnabled>True</TypeScriptCompileOnSaveEnabled>
     <TypeScriptNoImplicitAny>False</TypeScriptNoImplicitAny>
     <TypeScriptModuleKind>None</TypeScriptModuleKind>
-    <TypeScriptOutFile>../../build/elasticdsl.js</TypeScriptOutFile>
-    <TypeScriptOutDir>../../build</TypeScriptOutDir>
+    <TypeScriptOutFile>../../dist/elasticdsl.js</TypeScriptOutFile>
+    <TypeScriptOutDir>../../dist</TypeScriptOutDir>
     <TypeScriptGeneratesDeclarations>True</TypeScriptGeneratesDeclarations>
     <TypeScriptNoEmitOnError>True</TypeScriptNoEmitOnError>
     <TypeScriptMapRoot />
