@@ -36,6 +36,7 @@
   <ItemGroup>
     <TypeScriptCompile Include="asthelper.ts" />
     <TypeScriptCompile Include="elasticdsl.ts" />
+    <TypeScriptCompile Include="elasticdslImpl.ts" />
     <TypeScriptCompile Include="typings\esprima\esprima.d.ts" />
     <TypeScriptCompile Include="typings\estree\estree.d.ts" />
     <TypeScriptCompile Include="typings\tsd.d.ts" />

@@ -1,5 +1,125 @@
-import { PropertyVisitor } from './asthelper';
-export var ElasticDsl;
+var ElasticDsl;
+(function (ElasticDsl) {
+    class AstVisitor {
+        constructor() {
+            this.visitChain = [];
+        }
+        visit(node) {
+            this.visitChain.push(node);
+            var result;
+            switch (node.type) {
+                case esprima.Syntax.Program:
+                    result = this.visitProgram(node);
+                    break;
+                case esprima.Syntax.BinaryExpression:
+                    result = this.visitBinary(node);
+                    break;
+                case esprima.Syntax.UnaryExpression:
+                    result = this.visitUnary(node);
+                    break;
+                case esprima.Syntax.MemberExpression:
+                    result = this.visitMember(node);
+                    break;
+                case esprima.Syntax.ExpressionStatement:
+                    result = this.visitExpression(node);
+                    break;
+                case esprima.Syntax.FunctionExpression:
+                    result = this.visitFunctionExpression(node);
+                    break;
+                case esprima.Syntax.BlockStatement:
+                    result = this.visitBlockStatement(node);
+                    break;
+                case esprima.Syntax.ReturnStatement:
+                    result = this.visitReturn(node);
+                    break;
+                case esprima.Syntax.Identifier:
+                    result = this.visitIdentifier(node);
+                    break;
+                case esprima.Syntax.Literal:
+                    result = this.visitLiteral(node);
+                    break;
+                case esprima.Syntax.Property:
+                    result = this.visitProperty(node);
+                    break;
+                default:
+                    throw new Error("Invalid node type " + node.type);
+            }
+            this.visitChain.pop();
+            return result;
+        }
+        visitProgram(node) {
+            return node.body.map(d => this.visit(d)).join();
+        }
+        visitBinary(node) {
+            this.visit(node.left);
+            this.visit(node.right);
+            return "";
+        }
+        visitUnary(node) {
+            this.visit(node.argument);
+            return "";
+        }
+        visitMember(node) {
+            this.visit(node.object);
+            this.visit(node.property);
+            return "";
+        }
+        visitLogical(node) {
+            this.visit(node.left);
+            this.visit(node.right);
+            return "";
+        }
+        visitExpression(node) {
+            return this.visit(node.expression);
+        }
+        visitReturn(node) {
+            return this.visit(node.argument);
+        }
+        visitFunctionExpression(node) {
+            return this.visit(node.body);
+        }
+        visitBlockStatement(node) {
+            node.body.forEach(d => this.visit(d));
+            return "";
+        }
+        visitIdentifier(node) {
+            return "";
+        }
+        visitLiteral(node) {
+            return "";
+        }
+        visitProperty(node) {
+            return "";
+        }
+    }
+    ElasticDsl.AstVisitor = AstVisitor;
+    class PropertyVisitor extends AstVisitor {
+        constructor(func) {
+            super();
+            var tree = esprima.parse("(" + func.toString() + ")");
+            this.visit(tree);
+        }
+        static getProperty(fn, omitFirst = true) {
+            var visitor = new PropertyVisitor(fn);
+            var property = visitor.property;
+            if (omitFirst) {
+                var dotIndex = property.indexOf('.');
+                if (dotIndex > 0) {
+                    property = property.slice(dotIndex + 1);
+                }
+            }
+            return property;
+        }
+        visitMember(node) {
+            this.property = node.property + '.' + node.property;
+            this.visit(node.object);
+            return "";
+        }
+    }
+    ElasticDsl.PropertyVisitor = PropertyVisitor;
+})(ElasticDsl || (ElasticDsl = {}));
+/// <reference path="asthelper.ts" />
+var ElasticDsl;
 (function (ElasticDsl) {
     class ElasticTerminalFilter {
         constructor(parent) {
@@ -54,7 +174,7 @@ export var ElasticDsl;
             return new ElasticBoolFilter(this);
         }
         exists(field) {
-            var prop = PropertyVisitor.getProperty(field.toString());
+            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             return new ElasticRawFilter({ "exists": { "field": prop } }, this);
         }
         ids(idList) {
@@ -63,7 +183,7 @@ export var ElasticDsl;
         limit(amount) { return new ElasticRawFilter({ "value": amount }, this); }
         matchAll() { return new ElasticRawFilter({ "match_all": "" }, this); }
         missing(field) {
-            var prop = PropertyVisitor.getProperty(field.toString());
+            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             return new ElasticRawFilter({ "missing": { "field": prop } }, this);
         }
         not() {
@@ -72,7 +192,7 @@ export var ElasticDsl;
             }, this);
         }
         prefix(field, prefix) {
-            var prop = PropertyVisitor.getProperty(field.toString());
+            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var filter = { "prefix": {} };
             filter["prefix"][prop] = prefix;
             return new ElasticRawFilter(filter, this);
@@ -91,7 +211,7 @@ export var ElasticDsl;
             return this.range(field, null, null, gte);
         }
         range(field, lte, lt, gte, gt) {
-            var prop = PropertyVisitor.getProperty(field.toString());
+            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var range = {};
             if (lte) {
                 range["lte"] = lte;
@@ -111,19 +231,19 @@ export var ElasticDsl;
             return new ElasticRawFilter(filter, this);
         }
         regExp(field, regex) {
-            var prop = PropertyVisitor.getProperty(field.toString());
+            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var filter = { "regexp": {} };
             filter["regexp"][prop] = regex;
             return new ElasticRawFilter(filter, this);
         }
         term(field, term) {
-            var prop = PropertyVisitor.getProperty(field.toString());
+            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var filter = { "term": {} };
             filter["term"][prop] = term;
             return new ElasticRawFilter(filter, this);
         }
         terms(field, terms) {
-            var prop = PropertyVisitor.getProperty(field.toString());
+            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var filter = { "terms": {} };
             filter["terms"][prop] = terms;
             return new ElasticRawFilter(filter, this);
@@ -274,7 +394,7 @@ export var ElasticDsl;
         }
         sortBy(field, ascending = true) {
             var s = {};
-            var prop = PropertyVisitor.getProperty(field.toString());
+            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             if (ascending) {
                 s[prop] = { "order": "asc" };
             }
