@@ -1,0 +1,30 @@
+{
+  "name": "elastic-dsl-ts",
+  "version": "0.0.1",
+  "description": "Simple elastic search dsl builder",
+  "main": "./build/elasticdsl.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/concept-hf/elastic-dsl-ts.git"
+  },
+  "keywords": [
+    "elasticsearch",
+    "dsl",
+    "typescript"
+  ],
+  "author": "Hemmert Ferenc",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/concept-hf/elastic-dsl-ts/issues"
+  },
+  "homepage": "https://github.com/concept-hf/elastic-dsl-ts#readme",
+  "dependencies": {
+    "esprima": "^2.5.0"
+  },
+  "devDependencies": {
+    "gulp-typescript": "^2.8.1"
+  }
+}
