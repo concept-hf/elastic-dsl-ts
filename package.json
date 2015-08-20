@@ -1,8 +1,8 @@
 {
   "name": "elastic-dsl-ts",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "Simple elastic search dsl builder",
-  "main": "./build/elasticdsl.js",
+  "main": "dist/elasticdsl.js",
   "format": "es6",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
