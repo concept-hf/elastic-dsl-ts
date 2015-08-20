@@ -18,10 +18,10 @@ module ElasticDsl {
                 throw new Error("Previous root not found!");
             }
             var rooted = <ElasticRootedFilter<T, ElasticFilter<T>>>p;
-
+            
             return rooted.root;
         }
-
+        
         cast<TCast extends ElasticTerminalFilter<T>>() {
             return <TCast>this;
         }

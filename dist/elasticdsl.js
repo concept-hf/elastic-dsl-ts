@@ -1,10 +1,16 @@
+var __extends = (this && this.__extends) || function (d, b) {
+    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+    function __() { this.constructor = d; }
+    __.prototype = b.prototype;
+    d.prototype = new __();
+};
 var ElasticDsl;
 (function (ElasticDsl) {
-    class AstVisitor {
-        constructor() {
+    var AstVisitor = (function () {
+        function AstVisitor() {
             this.visitChain = [];
         }
-        visit(node) {
+        AstVisitor.prototype.visit = function (node) {
             this.visitChain.push(node);
             var result;
             switch (node.type) {
@@ -46,60 +52,65 @@ var ElasticDsl;
             }
             this.visitChain.pop();
             return result;
-        }
-        visitProgram(node) {
-            return node.body.map(d => this.visit(d)).join();
-        }
-        visitBinary(node) {
+        };
+        AstVisitor.prototype.visitProgram = function (node) {
+            var _this = this;
+            return node.body.map(function (d) { return _this.visit(d); }).join();
+        };
+        AstVisitor.prototype.visitBinary = function (node) {
             this.visit(node.left);
             this.visit(node.right);
             return "";
-        }
-        visitUnary(node) {
+        };
+        AstVisitor.prototype.visitUnary = function (node) {
             this.visit(node.argument);
             return "";
-        }
-        visitMember(node) {
+        };
+        AstVisitor.prototype.visitMember = function (node) {
             this.visit(node.object);
             this.visit(node.property);
             return "";
-        }
-        visitLogical(node) {
+        };
+        AstVisitor.prototype.visitLogical = function (node) {
             this.visit(node.left);
             this.visit(node.right);
             return "";
-        }
-        visitExpression(node) {
+        };
+        AstVisitor.prototype.visitExpression = function (node) {
             return this.visit(node.expression);
-        }
-        visitReturn(node) {
+        };
+        AstVisitor.prototype.visitReturn = function (node) {
             return this.visit(node.argument);
-        }
-        visitFunctionExpression(node) {
+        };
+        AstVisitor.prototype.visitFunctionExpression = function (node) {
             return this.visit(node.body);
-        }
-        visitBlockStatement(node) {
-            node.body.forEach(d => this.visit(d));
+        };
+        AstVisitor.prototype.visitBlockStatement = function (node) {
+            var _this = this;
+            node.body.forEach(function (d) { return _this.visit(d); });
             return "";
-        }
-        visitIdentifier(node) {
+        };
+        AstVisitor.prototype.visitIdentifier = function (node) {
             return "";
-        }
-        visitLiteral(node) {
+        };
+        AstVisitor.prototype.visitLiteral = function (node) {
             return "";
-        }
-        visitProperty(node) {
+        };
+        AstVisitor.prototype.visitProperty = function (node) {
             return "";
-        }
-    }
+        };
+        return AstVisitor;
+    })();
     ElasticDsl.AstVisitor = AstVisitor;
-    class PropertyVisitor extends AstVisitor {
-        constructor(func) {
-            super();
+    var PropertyVisitor = (function (_super) {
+        __extends(PropertyVisitor, _super);
+        function PropertyVisitor(func) {
+            _super.call(this);
             var tree = esprima.parse("(" + func.toString() + ")");
             this.visit(tree);
         }
-        static getProperty(fn, omitFirst = true) {
+        PropertyVisitor.getProperty = function (fn, omitFirst) {
+            if (omitFirst === void 0) { omitFirst = true; }
             var visitor = new PropertyVisitor(fn);
             var property = visitor.property;
             if (omitFirst) {
@@ -109,23 +120,24 @@ var ElasticDsl;
                 }
             }
             return property;
-        }
-        visitMember(node) {
+        };
+        PropertyVisitor.prototype.visitMember = function (node) {
             this.property = node.property + '.' + node.property;
             this.visit(node.object);
             return "";
-        }
-    }
+        };
+        return PropertyVisitor;
+    })(AstVisitor);
     ElasticDsl.PropertyVisitor = PropertyVisitor;
 })(ElasticDsl || (ElasticDsl = {}));
 /// <reference path="asthelper.ts" />
 var ElasticDsl;
 (function (ElasticDsl) {
-    class ElasticTerminalFilter {
-        constructor(parent) {
+    var ElasticTerminalFilter = (function () {
+        function ElasticTerminalFilter(parent) {
             this.localParent = parent;
         }
-        back() {
+        ElasticTerminalFilter.prototype.back = function () {
             var p = this.localParent;
             while (p && !p.hasOwnProperty('root')) {
                 p = p.parent;
@@ -135,21 +147,23 @@ var ElasticDsl;
             }
             var rooted = p;
             return rooted.root;
-        }
-        cast() {
+        };
+        ElasticTerminalFilter.prototype.cast = function () {
             return this;
-        }
-        compose() {
+        };
+        ElasticTerminalFilter.prototype.compose = function () {
             throw new Error("Base compose should not be called");
-        }
-        toJson() {
+        };
+        ElasticTerminalFilter.prototype.toJson = function () {
             return JSON.stringify(this.compose());
-        }
-    }
+        };
+        return ElasticTerminalFilter;
+    })();
     ElasticDsl.ElasticTerminalFilter = ElasticTerminalFilter;
-    class ElasticFilter extends ElasticTerminalFilter {
-        constructor(parent) {
-            super(parent);
+    var ElasticFilter = (function (_super) {
+        __extends(ElasticFilter, _super);
+        function ElasticFilter(parent) {
+            _super.call(this, parent);
             this.siblings = [];
             this.children = [];
             this.parent = parent;
@@ -157,60 +171,60 @@ var ElasticDsl;
                 parent.children.push(this);
             }
         }
-        wrap() {
+        ElasticFilter.prototype.wrap = function () {
             return new ElasticFilter(this);
-        }
-        and(fn) {
+        };
+        ElasticFilter.prototype.and = function (fn) {
             var andFilter = new ElasticAndFilter(this);
             fn(andFilter);
             return andFilter;
-        }
-        or(fn) {
+        };
+        ElasticFilter.prototype.or = function (fn) {
             var orFilter = new ElasticOrFilter(this);
             fn(orFilter);
             return orFilter;
-        }
-        bool() {
+        };
+        ElasticFilter.prototype.bool = function () {
             return new ElasticBoolFilter(this);
-        }
-        exists(field) {
+        };
+        ElasticFilter.prototype.exists = function (field) {
             var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             return new ElasticRawFilter({ "exists": { "field": prop } }, this);
-        }
-        ids(idList) {
+        };
+        ElasticFilter.prototype.ids = function (idList) {
             return new ElasticRawFilter({ "values": idList }, this);
-        }
-        limit(amount) { return new ElasticRawFilter({ "value": amount }, this); }
-        matchAll() { return new ElasticRawFilter({ "match_all": "" }, this); }
-        missing(field) {
+        };
+        ElasticFilter.prototype.limit = function (amount) { return new ElasticRawFilter({ "value": amount }, this); };
+        ElasticFilter.prototype.matchAll = function () { return new ElasticRawFilter({ "match_all": "" }, this); };
+        ElasticFilter.prototype.missing = function (field) {
             var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             return new ElasticRawFilter({ "missing": { "field": prop } }, this);
-        }
-        not() {
-            return new ElasticDirectComposited(d => {
+        };
+        ElasticFilter.prototype.not = function () {
+            return new ElasticDirectComposited(function (d) {
                 return { "not": d.composeChild() };
             }, this);
-        }
-        prefix(field, prefix) {
+        };
+        ElasticFilter.prototype.prefix = function (field, prefix) {
             var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var filter = { "prefix": {} };
             filter["prefix"][prop] = prefix;
             return new ElasticRawFilter(filter, this);
-        }
-        query(cache) { throw new Error("Not implemented"); }
-        lte(field, lte) {
+        };
+        ElasticFilter.prototype.query = function (cache) { throw new Error("Not implemented"); };
+        ElasticFilter.prototype.lte = function (field, lte) {
             return this.range(field, lte);
-        }
-        lt(field, lt) {
+        };
+        ElasticFilter.prototype.lt = function (field, lt) {
             return this.range(field, null, lt);
-        }
-        gt(field, gt) {
+        };
+        ElasticFilter.prototype.gt = function (field, gt) {
             return this.range(field, null, null, null, gt);
-        }
-        gte(field, gte) {
+        };
+        ElasticFilter.prototype.gte = function (field, gte) {
             return this.range(field, null, null, gte);
-        }
-        range(field, lte, lt, gte, gt) {
+        };
+        ElasticFilter.prototype.range = function (field, lte, lt, gte, gt) {
             var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var range = {};
             if (lte) {
@@ -229,35 +243,35 @@ var ElasticDsl;
             f[prop] = range;
             var filter = { "range": f };
             return new ElasticRawFilter(filter, this);
-        }
-        regExp(field, regex) {
+        };
+        ElasticFilter.prototype.regExp = function (field, regex) {
             var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var filter = { "regexp": {} };
             filter["regexp"][prop] = regex;
             return new ElasticRawFilter(filter, this);
-        }
-        term(field, term) {
+        };
+        ElasticFilter.prototype.term = function (field, term) {
             var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var filter = { "term": {} };
             filter["term"][prop] = term;
             return new ElasticRawFilter(filter, this);
-        }
-        terms(field, terms) {
+        };
+        ElasticFilter.prototype.terms = function (field, terms) {
             var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             var filter = { "terms": {} };
             filter["terms"][prop] = terms;
             return new ElasticRawFilter(filter, this);
-        }
-        raw(obj) {
+        };
+        ElasticFilter.prototype.raw = function (obj) {
             return new ElasticRawFilter(obj, this);
-        }
-        eq(field, val) {
+        };
+        ElasticFilter.prototype.eq = function (field, val) {
             return this.term(field, val);
-        }
-        composeChildren() {
-            return this.children.map(d => d.compose());
-        }
-        composeChild() {
+        };
+        ElasticFilter.prototype.composeChildren = function () {
+            return this.children.map(function (d) { return d.compose(); });
+        };
+        ElasticFilter.prototype.composeChild = function () {
             if (this.children.length > 1) {
                 throw new Error("Unexpected too many children");
             }
@@ -265,19 +279,23 @@ var ElasticDsl;
                 return this.children[0].compose();
             }
             return {};
-        }
-    }
+        };
+        return ElasticFilter;
+    })(ElasticTerminalFilter);
     ElasticDsl.ElasticFilter = ElasticFilter;
-    class ElasticRootedFilter extends ElasticFilter {
-        constructor(parent, root) {
-            super(parent);
+    var ElasticRootedFilter = (function (_super) {
+        __extends(ElasticRootedFilter, _super);
+        function ElasticRootedFilter(parent, root) {
+            _super.call(this, parent);
             this.root = root;
         }
-    }
+        return ElasticRootedFilter;
+    })(ElasticFilter);
     ElasticDsl.ElasticRootedFilter = ElasticRootedFilter;
-    class ElasticBoolFilter extends ElasticRootedFilter {
-        constructor(parent, root) {
-            super(parent, root);
+    var ElasticBoolFilter = (function (_super) {
+        __extends(ElasticBoolFilter, _super);
+        function ElasticBoolFilter(parent, root) {
+            _super.call(this, parent, root);
             if (root) {
                 this.mustFilter = new ElasticBoolFilter(this, root);
                 this.mustNotFilter = new ElasticBoolFilter(this, root);
@@ -290,23 +308,25 @@ var ElasticDsl;
                 this.root = this;
             }
         }
-        must(fn) {
+        ElasticBoolFilter.prototype.must = function (fn) {
             fn(this.root.mustFilter);
             return this.root.mustFilter;
-        }
-        mustnot(fn) {
+        };
+        ElasticBoolFilter.prototype.mustnot = function (fn) {
             fn(this.root.mustNotFilter);
             return this.root.mustNotFilter;
-        }
-        should(fn) {
+        };
+        ElasticBoolFilter.prototype.should = function (fn) {
             fn(this.root.shouldFilter);
             return this.root.shouldFilter;
-        }
-    }
+        };
+        return ElasticBoolFilter;
+    })(ElasticRootedFilter);
     ElasticDsl.ElasticBoolFilter = ElasticBoolFilter;
-    class ElasticAndFilter extends ElasticRootedFilter {
-        constructor(parent, root) {
-            super(parent, root);
+    var ElasticAndFilter = (function (_super) {
+        __extends(ElasticAndFilter, _super);
+        function ElasticAndFilter(parent, root) {
+            _super.call(this, parent, root);
             this.conditions = [];
             if (root) {
                 root.conditions.push(this);
@@ -315,16 +335,18 @@ var ElasticDsl;
                 this.conditions.push(this);
             }
         }
-        and(fn) {
+        ElasticAndFilter.prototype.and = function (fn) {
             var andFilter = new ElasticAndFilter(this, this.root);
             fn(andFilter);
             return andFilter;
-        }
-    }
+        };
+        return ElasticAndFilter;
+    })(ElasticRootedFilter);
     ElasticDsl.ElasticAndFilter = ElasticAndFilter;
-    class ElasticOrFilter extends ElasticRootedFilter {
-        constructor(parent, root) {
-            super(parent, root);
+    var ElasticOrFilter = (function (_super) {
+        __extends(ElasticOrFilter, _super);
+        function ElasticOrFilter(parent, root) {
+            _super.call(this, parent, root);
             this.conditions = [];
             if (root) {
                 root.conditions.push(this);
@@ -333,66 +355,75 @@ var ElasticDsl;
                 this.conditions.push(this);
             }
         }
-        or(fn) {
+        ElasticOrFilter.prototype.or = function (fn) {
             var andFilter = new ElasticOrFilter(this, this.root);
             fn(andFilter);
             return andFilter;
-        }
-    }
+        };
+        return ElasticOrFilter;
+    })(ElasticRootedFilter);
     ElasticDsl.ElasticOrFilter = ElasticOrFilter;
-    class ElasticRawFilter extends ElasticTerminalFilter {
-        constructor(rawJson, parent) {
-            super(parent);
+    var ElasticRawFilter = (function (_super) {
+        __extends(ElasticRawFilter, _super);
+        function ElasticRawFilter(rawJson, parent) {
+            _super.call(this, parent);
             this.rawObject = rawJson;
         }
-        compose() {
+        ElasticRawFilter.prototype.compose = function () {
             return this.rawObject;
-        }
-    }
+        };
+        return ElasticRawFilter;
+    })(ElasticTerminalFilter);
     ElasticDsl.ElasticRawFilter = ElasticRawFilter;
-    class ElasticDirectComposited extends ElasticFilter {
-        constructor(compositor, parent) {
-            super(parent);
+    var ElasticDirectComposited = (function (_super) {
+        __extends(ElasticDirectComposited, _super);
+        function ElasticDirectComposited(compositor, parent) {
+            _super.call(this, parent);
             this.compositor = compositor;
         }
-        composite() {
+        ElasticDirectComposited.prototype.composite = function () {
             return this.compositor(this);
-        }
-    }
+        };
+        return ElasticDirectComposited;
+    })(ElasticFilter);
     ElasticDsl.ElasticDirectComposited = ElasticDirectComposited;
-    class ElasticQuery {
-        toJson() {
-            throw new Error("Not implemented");
+    var ElasticQuery = (function () {
+        function ElasticQuery() {
         }
-    }
+        ElasticQuery.prototype.toJson = function () {
+            throw new Error("Not implemented");
+        };
+        return ElasticQuery;
+    })();
     ElasticDsl.ElasticQuery = ElasticQuery;
-    class ElasticSearch {
-        constructor() {
+    var ElasticSearch = (function () {
+        function ElasticSearch() {
             this.size = 0;
             this.from = 0;
             this.sort = [];
         }
-        filter() {
+        ElasticSearch.prototype.filter = function () {
             if (!this.elasticFilter) {
                 this.elasticFilter = new ElasticFilter();
             }
             return this.elasticFilter;
-        }
-        query() {
+        };
+        ElasticSearch.prototype.query = function () {
             if (!this.elasticQuery) {
                 this.elasticQuery = new ElasticQuery();
             }
             return this.elasticQuery;
-        }
-        take(amount) {
+        };
+        ElasticSearch.prototype.take = function (amount) {
             this.size = amount;
             return this;
-        }
-        skip(amount) {
+        };
+        ElasticSearch.prototype.skip = function (amount) {
             this.from = amount;
             return this;
-        }
-        sortBy(field, ascending = true) {
+        };
+        ElasticSearch.prototype.sortBy = function (field, ascending) {
+            if (ascending === void 0) { ascending = true; }
             var s = {};
             var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
             if (ascending) {
@@ -403,11 +434,11 @@ var ElasticDsl;
             }
             this.sort.push(s);
             return this;
-        }
-        sortByDesc(field) {
+        };
+        ElasticSearch.prototype.sortByDesc = function (field) {
             return this.sortBy(field, false);
-        }
-        toJson() {
+        };
+        ElasticSearch.prototype.toJson = function () {
             var json = { "query": { "filtered": {} } };
             if (this.elasticFilter) {
                 json["query"]["filtered"]["filter"] = this.elasticFilter.toJson();
@@ -425,8 +456,9 @@ var ElasticDsl;
                 json["sort"] = this.sort;
             }
             return json;
-        }
-    }
+        };
+        return ElasticSearch;
+    })();
     ElasticDsl.ElasticSearch = ElasticSearch;
 })(ElasticDsl || (ElasticDsl = {}));
 //# sourceMappingURL=elasticdsl.js.map

@@ -3,7 +3,6 @@
   "version": "0.0.4",
   "description": "Simple elastic search dsl builder",
   "main": "elasticdsl.js",
-  "format": "es6",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
