@@ -6,136 +6,12 @@ var __extends = (this && this.__extends) || function (d, b) {
 };
 var ElasticDsl;
 (function (ElasticDsl) {
-    var AstVisitor = (function () {
-        function AstVisitor() {
-            this.visitChain = [];
-        }
-        AstVisitor.prototype.visit = function (node) {
-            this.visitChain.push(node);
-            var result;
-            switch (node.type) {
-                case esprima.Syntax.Program:
-                    result = this.visitProgram(node);
-                    break;
-                case esprima.Syntax.BinaryExpression:
-                    result = this.visitBinary(node);
-                    break;
-                case esprima.Syntax.UnaryExpression:
-                    result = this.visitUnary(node);
-                    break;
-                case esprima.Syntax.MemberExpression:
-                    result = this.visitMember(node);
-                    break;
-                case esprima.Syntax.ExpressionStatement:
-                    result = this.visitExpression(node);
-                    break;
-                case esprima.Syntax.FunctionExpression:
-                    result = this.visitFunctionExpression(node);
-                    break;
-                case esprima.Syntax.BlockStatement:
-                    result = this.visitBlockStatement(node);
-                    break;
-                case esprima.Syntax.ReturnStatement:
-                    result = this.visitReturn(node);
-                    break;
-                case esprima.Syntax.Identifier:
-                    result = this.visitIdentifier(node);
-                    break;
-                case esprima.Syntax.Literal:
-                    result = this.visitLiteral(node);
-                    break;
-                case esprima.Syntax.Property:
-                    result = this.visitProperty(node);
-                    break;
-                default:
-                    throw new Error("Invalid node type " + node.type);
-            }
-            this.visitChain.pop();
-            return result;
-        };
-        AstVisitor.prototype.visitProgram = function (node) {
-            var _this = this;
-            return node.body.map(function (d) { return _this.visit(d); }).join();
-        };
-        AstVisitor.prototype.visitBinary = function (node) {
-            this.visit(node.left);
-            this.visit(node.right);
-            return "";
-        };
-        AstVisitor.prototype.visitUnary = function (node) {
-            this.visit(node.argument);
-            return "";
-        };
-        AstVisitor.prototype.visitMember = function (node) {
-            this.visit(node.object);
-            this.visit(node.property);
-            return "";
-        };
-        AstVisitor.prototype.visitLogical = function (node) {
-            this.visit(node.left);
-            this.visit(node.right);
-            return "";
-        };
-        AstVisitor.prototype.visitExpression = function (node) {
-            return this.visit(node.expression);
-        };
-        AstVisitor.prototype.visitReturn = function (node) {
-            return this.visit(node.argument);
-        };
-        AstVisitor.prototype.visitFunctionExpression = function (node) {
-            return this.visit(node.body);
-        };
-        AstVisitor.prototype.visitBlockStatement = function (node) {
-            var _this = this;
-            node.body.forEach(function (d) { return _this.visit(d); });
-            return "";
-        };
-        AstVisitor.prototype.visitIdentifier = function (node) {
-            return "";
-        };
-        AstVisitor.prototype.visitLiteral = function (node) {
-            return "";
-        };
-        AstVisitor.prototype.visitProperty = function (node) {
-            return "";
-        };
-        return AstVisitor;
-    })();
-    ElasticDsl.AstVisitor = AstVisitor;
-    var PropertyVisitor = (function (_super) {
-        __extends(PropertyVisitor, _super);
-        function PropertyVisitor(func) {
-            _super.call(this);
-            var tree = esprima.parse("(" + func.toString() + ")");
-            this.visit(tree);
-        }
-        PropertyVisitor.getProperty = function (fn, omitFirst) {
-            if (omitFirst === void 0) { omitFirst = true; }
-            var visitor = new PropertyVisitor(fn);
-            var property = visitor.property;
-            if (omitFirst) {
-                var dotIndex = property.indexOf('.');
-                if (dotIndex > 0) {
-                    property = property.slice(dotIndex + 1);
-                }
-            }
-            return property;
-        };
-        PropertyVisitor.prototype.visitMember = function (node) {
-            this.property = node.property + '.' + node.property;
-            this.visit(node.object);
-            return "";
-        };
-        return PropertyVisitor;
-    })(AstVisitor);
-    ElasticDsl.PropertyVisitor = PropertyVisitor;
-})(ElasticDsl || (ElasticDsl = {}));
-/// <reference path="asthelper.ts" />
-var ElasticDsl;
-(function (ElasticDsl) {
     var ElasticTerminalFilter = (function () {
         function ElasticTerminalFilter(parent) {
             this.localParent = parent;
+            if (parent) {
+                parent.children.push(this);
+            }
         }
         ElasticTerminalFilter.prototype.back = function () {
             var p = this.localParent;
@@ -157,6 +33,15 @@ var ElasticDsl;
         ElasticTerminalFilter.prototype.toJson = function () {
             return JSON.stringify(this.compose());
         };
+        ElasticTerminalFilter.prototype.execute = function () {
+            return this.getSearchRoot().execute();
+        };
+        ElasticTerminalFilter.prototype.getSearchRoot = function () {
+            if (!this.localParent || !this.localParent.searchRoot) {
+                throw new Error("Parent not found");
+            }
+            return this.localParent.searchRoot;
+        };
         return ElasticTerminalFilter;
     })();
     ElasticDsl.ElasticTerminalFilter = ElasticTerminalFilter;
@@ -168,6 +53,7 @@ var ElasticDsl;
             this.children = [];
             this.parent = parent;
             if (parent) {
+                this.searchRoot = parent.searchRoot;
                 parent.children.push(this);
             }
         }
@@ -188,7 +74,7 @@ var ElasticDsl;
             return new ElasticBoolFilter(this);
         };
         ElasticFilter.prototype.exists = function (field) {
-            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
+            var prop = PropertyVisitor.getProperty(field.toString());
             return new ElasticRawFilter({ "exists": { "field": prop } }, this);
         };
         ElasticFilter.prototype.ids = function (idList) {
@@ -197,7 +83,7 @@ var ElasticDsl;
         ElasticFilter.prototype.limit = function (amount) { return new ElasticRawFilter({ "value": amount }, this); };
         ElasticFilter.prototype.matchAll = function () { return new ElasticRawFilter({ "match_all": "" }, this); };
         ElasticFilter.prototype.missing = function (field) {
-            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
+            var prop = PropertyVisitor.getProperty(field.toString());
             return new ElasticRawFilter({ "missing": { "field": prop } }, this);
         };
         ElasticFilter.prototype.not = function () {
@@ -206,7 +92,7 @@ var ElasticDsl;
             }, this);
         };
         ElasticFilter.prototype.prefix = function (field, prefix) {
-            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
+            var prop = PropertyVisitor.getProperty(field.toString());
             var filter = { "prefix": {} };
             filter["prefix"][prop] = prefix;
             return new ElasticRawFilter(filter, this);
@@ -225,7 +111,7 @@ var ElasticDsl;
             return this.range(field, null, null, gte);
         };
         ElasticFilter.prototype.range = function (field, lte, lt, gte, gt) {
-            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
+            var prop = PropertyVisitor.getProperty(field.toString());
             var range = {};
             if (lte) {
                 range["lte"] = lte;
@@ -245,19 +131,19 @@ var ElasticDsl;
             return new ElasticRawFilter(filter, this);
         };
         ElasticFilter.prototype.regExp = function (field, regex) {
-            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
+            var prop = PropertyVisitor.getProperty(field.toString());
             var filter = { "regexp": {} };
             filter["regexp"][prop] = regex;
             return new ElasticRawFilter(filter, this);
         };
         ElasticFilter.prototype.term = function (field, term) {
-            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
+            var prop = PropertyVisitor.getProperty(field.toString());
             var filter = { "term": {} };
             filter["term"][prop] = term;
             return new ElasticRawFilter(filter, this);
         };
         ElasticFilter.prototype.terms = function (field, terms) {
-            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
+            var prop = PropertyVisitor.getProperty(field.toString());
             var filter = { "terms": {} };
             filter["terms"][prop] = terms;
             return new ElasticRawFilter(filter, this);
@@ -267,6 +153,9 @@ var ElasticDsl;
         };
         ElasticFilter.prototype.eq = function (field, val) {
             return this.term(field, val);
+        };
+        ElasticFilter.prototype.compose = function () {
+            return this.composeChild();
         };
         ElasticFilter.prototype.composeChildren = function () {
             return this.children.map(function (d) { return d.compose(); });
@@ -393,6 +282,9 @@ var ElasticDsl;
         ElasticQuery.prototype.toJson = function () {
             throw new Error("Not implemented");
         };
+        ElasticQuery.prototype.compose = function () {
+            throw new Error("Not implemented");
+        };
         return ElasticQuery;
     })();
     ElasticDsl.ElasticQuery = ElasticQuery;
@@ -402,17 +294,20 @@ var ElasticDsl;
             this.from = 0;
             this.sort = [];
         }
-        ElasticSearch.prototype.filter = function () {
+        ElasticSearch.prototype.filter = function (fn) {
             if (!this.elasticFilter) {
                 this.elasticFilter = new ElasticFilter();
+                this.elasticFilter.searchRoot = this;
             }
-            return this.elasticFilter;
+            fn(this.elasticFilter);
+            return this;
         };
-        ElasticSearch.prototype.query = function () {
+        ElasticSearch.prototype.query = function (fn) {
             if (!this.elasticQuery) {
                 this.elasticQuery = new ElasticQuery();
             }
-            return this.elasticQuery;
+            fn(this.elasticQuery);
+            return this;
         };
         ElasticSearch.prototype.take = function (amount) {
             this.size = amount;
@@ -425,7 +320,7 @@ var ElasticDsl;
         ElasticSearch.prototype.sortBy = function (field, ascending) {
             if (ascending === void 0) { ascending = true; }
             var s = {};
-            var prop = ElasticDsl.PropertyVisitor.getProperty(field.toString());
+            var prop = PropertyVisitor.getProperty(field.toString());
             if (ascending) {
                 s[prop] = { "order": "asc" };
             }
@@ -438,13 +333,13 @@ var ElasticDsl;
         ElasticSearch.prototype.sortByDesc = function (field) {
             return this.sortBy(field, false);
         };
-        ElasticSearch.prototype.toJson = function () {
+        ElasticSearch.prototype.compose = function () {
             var json = { "query": { "filtered": {} } };
             if (this.elasticFilter) {
-                json["query"]["filtered"]["filter"] = this.elasticFilter.toJson();
+                json["query"]["filtered"]["filter"] = this.elasticFilter.compose();
             }
             if (this.elasticQuery) {
-                json["query"]["filtered"]["query"] = this.elasticQuery.toJson();
+                json["query"]["filtered"]["query"] = this.elasticQuery.compose();
             }
             if (this.size > 0) {
                 json["size"] = this.size.toString();
@@ -457,8 +352,136 @@ var ElasticDsl;
             }
             return json;
         };
+        ElasticSearch.prototype.toJson = function () {
+            return JSON.stringify(this.compose());
+        };
+        ElasticSearch.prototype.execute = function () {
+            throw new Error("Not implemented. Derive your own base search class to execute the query.");
+        };
         return ElasticSearch;
     })();
     ElasticDsl.ElasticSearch = ElasticSearch;
+    var AstVisitor = (function () {
+        function AstVisitor() {
+            this.visitChain = [];
+        }
+        AstVisitor.prototype.visit = function (node) {
+            this.visitChain.push(node);
+            var result;
+            switch (node.type) {
+                case esprima.Syntax.Program:
+                    result = this.visitProgram(node);
+                    break;
+                case esprima.Syntax.BinaryExpression:
+                    result = this.visitBinary(node);
+                    break;
+                case esprima.Syntax.UnaryExpression:
+                    result = this.visitUnary(node);
+                    break;
+                case esprima.Syntax.MemberExpression:
+                    result = this.visitMember(node);
+                    break;
+                case esprima.Syntax.ExpressionStatement:
+                    result = this.visitExpression(node);
+                    break;
+                case esprima.Syntax.FunctionExpression:
+                    result = this.visitFunctionExpression(node);
+                    break;
+                case esprima.Syntax.BlockStatement:
+                    result = this.visitBlockStatement(node);
+                    break;
+                case esprima.Syntax.ReturnStatement:
+                    result = this.visitReturn(node);
+                    break;
+                case esprima.Syntax.Identifier:
+                    result = this.visitIdentifier(node);
+                    break;
+                case esprima.Syntax.Literal:
+                    result = this.visitLiteral(node);
+                    break;
+                case esprima.Syntax.Property:
+                    result = this.visitProperty(node);
+                    break;
+                default:
+                    throw new Error("Invalid node type " + node.type);
+            }
+            this.visitChain.pop();
+            return result;
+        };
+        AstVisitor.prototype.visitProgram = function (node) {
+            var _this = this;
+            return node.body.map(function (d) { return _this.visit(d); }).join();
+        };
+        AstVisitor.prototype.visitBinary = function (node) {
+            this.visit(node.left);
+            this.visit(node.right);
+            return "";
+        };
+        AstVisitor.prototype.visitUnary = function (node) {
+            this.visit(node.argument);
+            return "";
+        };
+        AstVisitor.prototype.visitMember = function (node) {
+            this.visit(node.object);
+            this.visit(node.property);
+            return "";
+        };
+        AstVisitor.prototype.visitLogical = function (node) {
+            this.visit(node.left);
+            this.visit(node.right);
+            return "";
+        };
+        AstVisitor.prototype.visitExpression = function (node) {
+            return this.visit(node.expression);
+        };
+        AstVisitor.prototype.visitReturn = function (node) {
+            return this.visit(node.argument);
+        };
+        AstVisitor.prototype.visitFunctionExpression = function (node) {
+            return this.visit(node.body);
+        };
+        AstVisitor.prototype.visitBlockStatement = function (node) {
+            var _this = this;
+            node.body.forEach(function (d) { return _this.visit(d); });
+            return "";
+        };
+        AstVisitor.prototype.visitIdentifier = function (node) {
+            return "";
+        };
+        AstVisitor.prototype.visitLiteral = function (node) {
+            return "";
+        };
+        AstVisitor.prototype.visitProperty = function (node) {
+            return "";
+        };
+        return AstVisitor;
+    })();
+    var PropertyVisitor = (function (_super) {
+        __extends(PropertyVisitor, _super);
+        function PropertyVisitor(func) {
+            _super.call(this);
+            var tree = esprima.parse("(" + func.toString() + ")");
+            this.visit(tree);
+        }
+        PropertyVisitor.getProperty = function (fn, omitFirst) {
+            if (omitFirst === void 0) { omitFirst = true; }
+            var visitor = new PropertyVisitor(fn);
+            var property = visitor.property;
+            if (omitFirst) {
+                var dotIndex = property.indexOf('.');
+                if (dotIndex > 0) {
+                    property = property.slice(dotIndex + 1);
+                }
+            }
+            return property;
+        };
+        PropertyVisitor.prototype.visitMember = function (node) {
+            var propAsId = node.property;
+            this.property = this.property + '.' + propAsId.name;
+            this.visit(node.object);
+            return "";
+        };
+        return PropertyVisitor;
+    })(AstVisitor);
 })(ElasticDsl || (ElasticDsl = {}));
 //# sourceMappingURL=elasticdsl.js.map

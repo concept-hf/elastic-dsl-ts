@@ -9,16 +9,18 @@
 
     export interface IElasticQuery<T> {
         toJson(): any;
+        compose(): any;
     }
 
     export interface IElasticSearch<T> {
-        filter(): IElasticFilter<T>;
-        query(): IElasticQuery<T>;
+        filter(fn: (filter: IElasticFilter<T>) => void): IElasticSearch<T>;
+        query(fn: (filter: IElasticFilter<T>) => void): IElasticSearch<T>;
         toJson(): any;
         take(amount: number): IElasticSearch<T>;
         skip(amount: number): IElasticSearch<T>;
         sortBy(prop: IElasticProp<T>): IElasticSearch<T>;
         sortByDesc(field: IElasticProp<T>): IElasticSearch<T>;
+        execute(): Promise<T[]>;
     }
 
     export interface IElasticFilterBase {
@@ -29,6 +31,7 @@
         back(): IElasticFilter<T>;
         compose(): any;
         toJson(): string;
+        execute(): Promise<T[]>;
     }
 
     export interface IElasticFilter<T> extends IElasticTerminal<T>, IElasticFilterBase {
@@ -56,6 +59,8 @@
         raw(obj: any): IElasticTerminal<T>;
 
         eq(prop: IElasticProp<T>, val: string): IElasticTerminal<T>;
+
+        searchRoot: IElasticSearch<T>;
     }
 
     export interface IElasticBoolFilter<T> extends IElasticFilter<T> {

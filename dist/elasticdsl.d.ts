@@ -7,15 +7,17 @@ declare module ElasticDsl {
     }
     interface IElasticQuery<T> {
         toJson(): any;
+        compose(): any;
     }
     interface IElasticSearch<T> {
-        filter(): IElasticFilter<T>;
-        query(): IElasticQuery<T>;
+        filter(fn: (filter: IElasticFilter<T>) => void): IElasticSearch<T>;
+        query(fn: (filter: IElasticFilter<T>) => void): IElasticSearch<T>;
         toJson(): any;
         take(amount: number): IElasticSearch<T>;
         skip(amount: number): IElasticSearch<T>;
         sortBy(prop: IElasticProp<T>): IElasticSearch<T>;
         sortByDesc(field: IElasticProp<T>): IElasticSearch<T>;
+        execute(): Promise<T[]>;
     }
     interface IElasticFilterBase {
     }
@@ -23,6 +25,7 @@ declare module ElasticDsl {
         back(): IElasticFilter<T>;
         compose(): any;
         toJson(): string;
+        execute(): Promise<T[]>;
     }
     interface IElasticFilter<T> extends IElasticTerminal<T>, IElasticFilterBase {
         and(fn: IElasticFn<T>): IElasticFilter<T>;
@@ -47,35 +50,12 @@ declare module ElasticDsl {
         wrap(): IElasticFilter<T>;
         raw(obj: any): IElasticTerminal<T>;
         eq(prop: IElasticProp<T>, val: string): IElasticTerminal<T>;
+        searchRoot: IElasticSearch<T>;
     }
     interface IElasticBoolFilter<T> extends IElasticFilter<T> {
         must(fn: IElasticFn<T>): IElasticBoolFilter<T>;
         mustnot(fn: IElasticFn<T>): IElasticBoolFilter<T>;
         should(fn: IElasticFn<T>): IElasticBoolFilter<T>;
-    }
-}
-declare module ElasticDsl {
-    class AstVisitor {
-        visitChain: ESTree.Node[];
-        protected visit(node: ESTree.Node): string;
-        protected visitProgram(node: ESTree.Program): string;
-        protected visitBinary(node: ESTree.BinaryExpression): string;
-        protected visitUnary(node: ESTree.UnaryExpression): string;
-        protected visitMember(node: ESTree.MemberExpression): string;
-        protected visitLogical(node: ESTree.LogicalExpression): string;
-        protected visitExpression(node: ESTree.ExpressionStatement): string;
-        protected visitReturn(node: ESTree.ReturnStatement): string;
-        protected visitFunctionExpression(node: ESTree.FunctionExpression): string;
-        protected visitBlockStatement(node: ESTree.BlockStatement): string;
-        protected visitIdentifier(node: ESTree.Identifier): string;
-        protected visitLiteral(node: ESTree.Literal): string;
-        protected visitProperty(node: ESTree.Property): string;
-    }
-    class PropertyVisitor extends AstVisitor {
-        static getProperty(fn: any, omitFirst?: boolean): string;
-        property: string;
-        constructor(func: any);
-        protected visitMember(node: ESTree.MemberExpression): string;
     }
 }
 declare module ElasticDsl {
@@ -86,11 +66,14 @@ declare module ElasticDsl {
         cast<TCast extends ElasticTerminalFilter<T>>(): TCast;
         compose(): any;
         toJson(): string;
+        execute(): Promise<T[]>;
+        private getSearchRoot();
     }
     class ElasticFilter<T> extends ElasticTerminalFilter<T> implements IElasticFilter<T> {
         parent: ElasticFilter<T>;
         siblings: ElasticFilter<T>[];
-        children: ElasticFilter<T>[];
+        children: IElasticTerminal<T>[];
+        searchRoot: IElasticSearch<T>;
         constructor(parent?: ElasticFilter<T>);
         wrap(): IElasticFilter<T>;
         and(fn: IElasticFn<T>): IElasticFilter<T>;
@@ -114,6 +97,7 @@ declare module ElasticDsl {
         terms(field: IElasticProp<T>, terms: string[]): IElasticTerminal<T>;
         raw(obj: any): ElasticRawFilter<T>;
         eq(field: IElasticProp<T>, val: string): IElasticTerminal<T>;
+        compose(): any;
         protected composeChildren(): any[];
         protected composeChild(): any;
     }
@@ -155,6 +139,7 @@ declare module ElasticDsl {
     }
     class ElasticQuery<T> implements IElasticQuery<T> {
         toJson(): any;
+        compose(): any;
     }
     class ElasticSearch<T> implements IElasticSearch<T> {
         private elasticFilter;
@@ -162,12 +147,14 @@ declare module ElasticDsl {
         private size;
         private from;
         private sort;
-        filter(): IElasticFilter<T>;
-        query(): IElasticQuery<T>;
+        filter(fn: (filter: IElasticFilter<T>) => void): IElasticSearch<T>;
+        query(fn: (query: IElasticQuery<T>) => void): IElasticSearch<T>;
         take(amount: number): IElasticSearch<T>;
         skip(amount: number): IElasticSearch<T>;
         sortBy(field: IElasticProp<T>, ascending?: boolean): IElasticSearch<T>;
         sortByDesc(field: IElasticProp<T>): IElasticSearch<T>;
+        compose(): any;
         toJson(): any;
+        execute(): Promise<T[]>;
     }
 }

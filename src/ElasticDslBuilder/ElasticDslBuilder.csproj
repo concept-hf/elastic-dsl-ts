@@ -34,7 +34,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <TypeScriptCompile Include="asthelper.ts" />
     <TypeScriptCompile Include="elasticdsl.ts" />
     <TypeScriptCompile Include="elasticdslImpl.ts" />
     <TypeScriptCompile Include="typings\esprima\esprima.d.ts" />
