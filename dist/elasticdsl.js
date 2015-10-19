@@ -54,7 +54,6 @@ var ElasticDsl;
             this.parent = parent;
             if (parent) {
                 this.searchRoot = parent.searchRoot;
-                parent.children.push(this);
             }
         }
         ElasticFilter.prototype.wrap = function () {
@@ -209,6 +208,29 @@ var ElasticDsl;
             fn(this.root.shouldFilter);
             return this.root.shouldFilter;
         };
+        ElasticBoolFilter.prototype.compose = function () {
+            if (!this.root) {
+                var result = {};
+                if (this.mustFilter) {
+                    this.checkSingleChild(this.mustFilter);
+                    result["must"] = this.mustFilter.children[0].compose();
+                }
+                if (this.mustNotFilter) {
+                    this.checkSingleChild(this.mustFilter);
+                    result["mustnot"] = this.mustNotFilter.children[0].compose();
+                }
+                if (this.shouldFilter) {
+                    this.checkSingleChild(this.shouldFilter);
+                    result["should"] = this.shouldFilter.children[0].compose();
+                }
+            }
+            throw new Error("Only root 'bool' filter is composable");
+        };
+        ElasticBoolFilter.prototype.checkSingleChild = function (filter) {
+            if (filter.children.length != 1) {
+                throw new Error("Filter should have exactly one child");
+            }
+        };
         return ElasticBoolFilter;
     })(ElasticRootedFilter);
     ElasticDsl.ElasticBoolFilter = ElasticBoolFilter;
@@ -225,9 +247,23 @@ var ElasticDsl;
             }
         }
         ElasticAndFilter.prototype.and = function (fn) {
-            var andFilter = new ElasticAndFilter(this, this.root);
+            var andFilter = new ElasticAndFilter(this, this.root == null ? this : this.root);
             fn(andFilter);
             return andFilter;
+        };
+        ElasticAndFilter.prototype.compose = function () {
+            if (!this.root) {
+                var childComposites = [];
+                this.conditions.forEach(function (d) {
+                    if (d.children.length == 1 && !(d.children[0] instanceof ElasticAndFilter)) {
+                        childComposites.push(d.children[0].compose());
+                    }
+                });
+                return {
+                    "and": childComposites
+                };
+            }
+            throw new Error("Only root 'and' filter is composable");
         };
         return ElasticAndFilter;
     })(ElasticRootedFilter);
@@ -245,9 +281,23 @@ var ElasticDsl;
             }
         }
         ElasticOrFilter.prototype.or = function (fn) {
-            var andFilter = new ElasticOrFilter(this, this.root);
+            var andFilter = new ElasticOrFilter(this, this.root == null ? this : this.root);
             fn(andFilter);
             return andFilter;
+        };
+        ElasticOrFilter.prototype.compose = function () {
+            if (!this.root) {
+                var childComposites = [];
+                this.conditions.forEach(function (d) {
+                    if (d.children.length == 1 && !(d.children[0] instanceof ElasticOrFilter)) {
+                        childComposites.push(d.children[0].compose());
+                    }
+                });
+                return {
+                    "or": childComposites
+                };
+            }
+            throw new Error("Only root 'or' filter is composable");
         };
         return ElasticOrFilter;
     })(ElasticRootedFilter);
@@ -264,6 +314,90 @@ var ElasticDsl;
         return ElasticRawFilter;
     })(ElasticTerminalFilter);
     ElasticDsl.ElasticRawFilter = ElasticRawFilter;
+    var ElasticAggregateResult = (function () {
+        function ElasticAggregateResult(name) {
+            this.name = name;
+        }
+        ElasticAggregateResult.prototype.read = function (result) {
+            return result.aggregations[this.name];
+        };
+        return ElasticAggregateResult;
+    })();
+    ElasticDsl.ElasticAggregateResult = ElasticAggregateResult;
+    var ElasticAggregation = (function () {
+        function ElasticAggregation(name) {
+            this.children = new Map();
+            this.aggObject = {};
+            this.name = name;
+        }
+        ElasticAggregation.prototype.subAggregate = function (name) {
+            var agg = new ElasticAggregation(name);
+            this.children.set(name, agg);
+            return agg;
+        };
+        ElasticAggregation.prototype.bucketFilter = function (fn) {
+            if (!this.bucketFilter) {
+                this.localBucketFilter = new ElasticFilter();
+            }
+            fn(this.localBucketFilter);
+            return this;
+        };
+        ElasticAggregation.prototype.min = function (field) {
+            var prop = PropertyVisitor.getProperty(field.toString());
+            this.aggObject = { "min": { "field": prop } };
+            return new ElasticAggregateResult(this.name);
+        };
+        ElasticAggregation.prototype.max = function (field) {
+            var prop = PropertyVisitor.getProperty(field.toString());
+            this.aggObject = { "max": { "field": prop } };
+            return new ElasticAggregateResult(this.name);
+        };
+        ElasticAggregation.prototype.sum = function (field) {
+            var prop = PropertyVisitor.getProperty(field.toString());
+            this.aggObject = { "sum": { "field": prop } };
+            return new ElasticAggregateResult(this.name);
+        };
+        ElasticAggregation.prototype.avg = function (field) {
+            var prop = PropertyVisitor.getProperty(field.toString());
+            this.aggObject = { "avg": { "field": prop } };
+            return new ElasticAggregateResult(this.name);
+        };
+        ElasticAggregation.prototype.count = function (field) {
+            var prop = PropertyVisitor.getProperty(field.toString());
+            this.aggObject = { "value_count": { "field": prop } };
+            return new ElasticAggregateResult(this.name);
+        };
+        ElasticAggregation.prototype.stats = function (field) {
+            var prop = PropertyVisitor.getProperty(field.toString());
+            this.aggObject = { "stats": { "field": prop } };
+            return new ElasticAggregateResult(this.name);
+        };
+        ElasticAggregation.prototype.extendedStats = function (field) {
+            var prop = PropertyVisitor.getProperty(field.toString());
+            this.aggObject = { "extended_stats": { "field": prop } };
+            return new ElasticAggregateResult(this.name);
+        };
+        ElasticAggregation.prototype.compose = function () {
+            var res = {};
+            if (this.bucketFilter || this.children.size > 0) {
+                if (this.bucketFilter) {
+                    res["filter"] = this.localBucketFilter.compose();
+                }
+                if (this.children.size > 0) {
+                    res["aggs"] = {};
+                    this.children.forEach(function (agg, name) {
+                        res["aggs"][name] = agg.compose();
+                    });
+                }
+            }
+            else {
+                res[this.name] = this.aggObject;
+            }
+            return res;
+        };
+        return ElasticAggregation;
+    })();
+    ElasticDsl.ElasticAggregation = ElasticAggregation;
     var ElasticDirectComposited = (function (_super) {
         __extends(ElasticDirectComposited, _super);
         function ElasticDirectComposited(compositor, parent) {
@@ -290,6 +424,7 @@ var ElasticDsl;
     ElasticDsl.ElasticQuery = ElasticQuery;
     var ElasticSearch = (function () {
         function ElasticSearch() {
+            this.elasticAggregates = new Map();
             this.size = 0;
             this.from = 0;
             this.sort = [];
@@ -307,6 +442,13 @@ var ElasticDsl;
                 this.elasticQuery = new ElasticQuery();
             }
             fn(this.elasticQuery);
+            return this;
+        };
+        ElasticSearch.prototype.aggregate = function (name, fn) {
+            if (!this.elasticAggregates.has(name)) {
+                this.elasticAggregates.set(name, new ElasticAggregation(name));
+            }
+            fn(this.elasticAggregates.get(name));
             return this;
         };
         ElasticSearch.prototype.take = function (amount) {
@@ -340,6 +482,12 @@ var ElasticDsl;
             }
             if (this.elasticQuery) {
                 json["query"]["filtered"]["query"] = this.elasticQuery.compose();
+            }
+            if (this.elasticAggregates.size > 0) {
+                json["aggs"] = {};
+                this.elasticAggregates.forEach(function (agg, name) {
+                    json["aggs"][name] = agg.compose();
+                });
             }
             if (this.size > 0) {
                 json["size"] = this.size.toString();

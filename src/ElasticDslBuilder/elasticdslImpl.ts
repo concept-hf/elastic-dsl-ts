@@ -34,7 +34,7 @@
             return JSON.stringify(this.compose());
         }
 
-        execute(): Promise<T[]> {
+        execute(): Promise<IElasticSearchResult<T>> {
             return this.getSearchRoot().execute();
         }
 
@@ -59,7 +59,7 @@
             this.parent = parent;
             if (parent) {
                 this.searchRoot = parent.searchRoot;
-                parent.children.push(this);
+                // parent.children.push(this);
             }
         }
 
@@ -243,6 +243,34 @@
             fn(this.root.shouldFilter);
             return this.root.shouldFilter;
         }
+
+        compose(): any {
+            if (!this.root) {
+                var result = {};
+                if (this.mustFilter) {
+                    this.checkSingleChild(this.mustFilter);
+                    result["must"] = this.mustFilter.children[0].compose();
+                }
+
+                if (this.mustNotFilter) {
+                    this.checkSingleChild(this.mustFilter);
+                    result["mustnot"] = this.mustNotFilter.children[0].compose();
+                }
+
+                if (this.shouldFilter) {
+                    this.checkSingleChild(this.shouldFilter);
+                    result["should"] = this.shouldFilter.children[0].compose();
+                }
+            }
+
+            throw new Error("Only root 'bool' filter is composable");
+        }
+
+        private checkSingleChild(filter: ElasticBoolFilter<T>) {
+            if (filter.children.length != 1) {
+                throw new Error("Filter should have exactly one child");
+            }
+        }
     }
 
     export class ElasticAndFilter<T> extends ElasticRootedFilter<T, ElasticAndFilter<T>> {
@@ -258,9 +286,25 @@
         }
 
         and(fn: IElasticFn<T>): IElasticFilter<T> {
-            var andFilter = new ElasticAndFilter<T>(this, this.root);
+            var andFilter = new ElasticAndFilter<T>(this, this.root == null ? this : this.root);
             fn(andFilter);
             return andFilter;
+        }
+
+        compose(): any {
+            if (!this.root) {
+                var childComposites = []
+                this.conditions.forEach(d => {
+                    if (d.children.length == 1 && !(d.children[0] instanceof ElasticAndFilter)) {
+                        childComposites.push(d.children[0].compose());
+                    }
+                });
+                return {
+                    "and": childComposites
+                }
+            }
+
+            throw new Error("Only root 'and' filter is composable");
         }
     }
 
@@ -277,9 +321,25 @@
         }
 
         or(fn: IElasticFn<T>): IElasticFilter<T> {
-            var andFilter = new ElasticOrFilter<T>(this, this.root);
+            var andFilter = new ElasticOrFilter<T>(this, this.root == null ? this : this.root);
             fn(andFilter);
             return andFilter;
+        }
+
+        compose(): any {
+            if (!this.root) {
+                var childComposites = []
+                this.conditions.forEach(d => {
+                    if (d.children.length == 1 && !(d.children[0] instanceof ElasticOrFilter)) {
+                        childComposites.push(d.children[0].compose());
+                    }
+                });
+                return {
+                    "or": childComposites
+                }
+            }
+
+            throw new Error("Only root 'or' filter is composable");
         }
     }
 
@@ -293,6 +353,106 @@
 
         compose(): any {
             return this.rawObject;
+        }
+    }
+
+    export class ElasticAggregateResult implements IAggregationResult<any> {
+        name: string;
+
+        constructor(name: string) {
+            this.name = name;
+        }
+
+        read(result: IElasticSearchResult<any>): any {
+            return result.aggregations[this.name];
+        }
+    }
+
+    export class ElasticAggregation<T> implements IElasticAggregation<T>{
+        private name: string;
+        private localBucketFilter: ElasticFilter<T>;
+        private children: Map<string, ElasticAggregation<T>> = new Map<string, ElasticAggregation<T>>();
+        private aggObject: any = {};
+
+        constructor(name: string) {
+            this.name = name;
+        }
+
+        subAggregate(name: string): IElasticAggregation<T> {
+            var agg = new ElasticAggregation<T>(name);
+            this.children.set(name, agg);
+            return agg;
+        }
+
+        bucketFilter(fn: IElasticFn<T>): IElasticAggregation<T> {
+            if (!this.bucketFilter) {
+                this.localBucketFilter = new ElasticFilter<T>();
+            }
+
+            fn(this.localBucketFilter);
+
+            return this;
+        }
+
+        min(field: IElasticProp<T>): ISingleValueMetric<number> {
+            var prop = PropertyVisitor.getProperty((<any>field).toString());
+            this.aggObject = { "min": { "field": prop } };
+            return <any>new ElasticAggregateResult(this.name);
+        }
+
+        max(field: IElasticProp<T>): ISingleValueMetric<number> {
+            var prop = PropertyVisitor.getProperty((<any>field).toString());
+            this.aggObject = { "max": { "field": prop } };
+            return <any>new ElasticAggregateResult(this.name);
+        }
+
+        sum(field: IElasticProp<T>): ISingleValueMetric<number> {
+            var prop = PropertyVisitor.getProperty((<any>field).toString());
+            this.aggObject = { "sum": { "field": prop } };
+            return <any>new ElasticAggregateResult(this.name);
+        }
+
+        avg(field: IElasticProp<T>): ISingleValueMetric<number> {
+            var prop = PropertyVisitor.getProperty((<any>field).toString());
+            this.aggObject = { "avg": { "field": prop } };
+            return <any>new ElasticAggregateResult(this.name);
+        }
+        
+        count(field: IElasticProp<T>): ISingleValueMetric<number> {
+            var prop = PropertyVisitor.getProperty((<any>field).toString());
+            this.aggObject = { "value_count": { "field": prop } };
+            return <any>new ElasticAggregateResult(this.name);
+        }
+
+        stats(field: IElasticProp<T>): IStatsResult {
+            var prop = PropertyVisitor.getProperty((<any>field).toString());
+            this.aggObject = { "stats": { "field": prop } };
+            return <any>new ElasticAggregateResult(this.name);
+        }
+
+        extendedStats(field: IElasticProp<T>): IExtendedStatsResult {
+            var prop = PropertyVisitor.getProperty((<any>field).toString());
+            this.aggObject = { "extended_stats": { "field": prop } };
+            return <any>new ElasticAggregateResult(this.name);
+        }
+        
+        compose(): any {
+            var res = {};
+            if (this.bucketFilter || this.children.size > 0) {
+                if (this.bucketFilter) {
+                    res["filter"] = this.localBucketFilter.compose();
+                }
+                if (this.children.size > 0) {
+                    res["aggs"] = {};
+                    this.children.forEach((agg, name) => {
+                        res["aggs"][name] = agg.compose();
+                    });
+                }
+            } else {
+                res[this.name] = this.aggObject;
+            }
+
+            return res;
         }
     }
 
@@ -329,6 +489,8 @@
 
         private elasticQuery: IElasticQuery<T>;
 
+        private elasticAggregates: Map<string, IElasticAggregation<T>> = new Map<string, IElasticAggregation<T>>();
+
         private size: number = 0;
 
         private from: number = 0;
@@ -352,6 +514,16 @@
             }
 
             fn(this.elasticQuery);
+
+            return this;
+        }
+
+        aggregate(name: string, fn: (aggregate: IElasticAggregation<T>) => void): IElasticSearch<T> {
+            if (!this.elasticAggregates.has(name)) {
+                this.elasticAggregates.set(name, new ElasticAggregation<T>(name));
+            }
+
+            fn(this.elasticAggregates.get(name));
 
             return this;
         }
@@ -393,6 +565,13 @@
                 json["query"]["filtered"]["query"] = this.elasticQuery.compose();
             }
 
+            if (this.elasticAggregates.size > 0) {
+                json["aggs"] = {};
+                this.elasticAggregates.forEach((agg, name) => {
+                    json["aggs"][name] = agg.compose();
+                });
+            }
+
             if (this.size > 0) {
                 json["size"] = this.size.toString();
             }
@@ -404,7 +583,7 @@
             if (this.sort.length > 0) {
                 json["sort"] = this.sort;
             }
-
+            
             return json;
         }
 
@@ -412,7 +591,7 @@
             return JSON.stringify(this.compose());
         }
 
-        execute(): Promise<T[]> {
+        execute(): Promise<IElasticSearchResult<T>> {
             throw new Error("Not implemented. Derive your own base search class to execute the query.");
         }
     }

@@ -12,12 +12,13 @@ declare module ElasticDsl {
     interface IElasticSearch<T> {
         filter(fn: (filter: IElasticFilter<T>) => void): IElasticSearch<T>;
         query(fn: (filter: IElasticFilter<T>) => void): IElasticSearch<T>;
+        aggregate(name: string, fn: (aggregate: IElasticAggregation<T>) => void): IElasticSearch<T>;
         toJson(): any;
         take(amount: number): IElasticSearch<T>;
         skip(amount: number): IElasticSearch<T>;
         sortBy(prop: IElasticProp<T>): IElasticSearch<T>;
         sortByDesc(field: IElasticProp<T>): IElasticSearch<T>;
-        execute(): Promise<T[]>;
+        execute(): Promise<IElasticSearchResult<T>>;
     }
     interface IElasticFilterBase {
     }
@@ -25,7 +26,7 @@ declare module ElasticDsl {
         back(): IElasticFilter<T>;
         compose(): any;
         toJson(): string;
-        execute(): Promise<T[]>;
+        execute(): Promise<IElasticSearchResult<T>>;
     }
     interface IElasticFilter<T> extends IElasticTerminal<T>, IElasticFilterBase {
         and(fn: IElasticFn<T>): IElasticFilter<T>;
@@ -57,6 +58,65 @@ declare module ElasticDsl {
         mustnot(fn: IElasticFn<T>): IElasticBoolFilter<T>;
         should(fn: IElasticFn<T>): IElasticBoolFilter<T>;
     }
+    interface IElasticAggregation<T> {
+        compose(): any;
+        subAggregate(name: string): IElasticAggregation<T>;
+        bucketFilter(fn: IElasticFn<T>): IElasticAggregation<T>;
+        min(field: IElasticProp<T>): ISingleValueMetric<number>;
+        max(field: IElasticProp<T>): ISingleValueMetric<number>;
+        sum(field: IElasticProp<T>): ISingleValueMetric<number>;
+        avg(field: IElasticProp<T>): ISingleValueMetric<number>;
+        count(field: IElasticProp<T>): ISingleValueMetric<number>;
+        stats(field: IElasticProp<T>): IStatsResult;
+        extendedStats(field: IElasticProp<T>): IExtendedStatsResult;
+    }
+    interface ISingleValueMetric<TMetricType> extends IAggregationResult<ISingleValueMetric<TMetricType>> {
+        value: TMetricType;
+    }
+    interface IMultiValueMetric<TMetricType> extends IAggregationResult<IMultiValueMetric<TMetricType>> {
+        values: TMetricType[];
+    }
+    interface IStatsResult extends IAggregationResult<IStatsResult> {
+        count: number;
+        min: number;
+        max: number;
+        avg: number;
+        sum: number;
+    }
+    interface IExtendedStatsResult extends IAggregationResult<IExtendedStatsResult> {
+        count: number;
+        min: number;
+        max: number;
+        avg: number;
+        sum: number;
+        sum_of_squares: number;
+        variance: number;
+        std_deviation: number;
+        upper: number;
+        lower: number;
+    }
+    interface IAggregationResult<TAgg> {
+        name: string;
+        read(result: IElasticSearchResult<any>): TAgg;
+    }
+    interface IElasticHit<T> {
+        _index: string;
+        _type: string;
+        _id: string;
+        _source: T;
+    }
+    interface IElasticSearchResult<T> {
+        _shards: {
+            total: number;
+            succesfull: number;
+            failed: number;
+        };
+        hits: {
+            total: number;
+            hits: IElasticHit<T>[];
+        };
+        aggregations: any;
+    }
 }
 declare module ElasticDsl {
     class ElasticTerminalFilter<T> implements IElasticTerminal<T> {
@@ -66,7 +126,7 @@ declare module ElasticDsl {
         cast<TCast extends ElasticTerminalFilter<T>>(): TCast;
         compose(): any;
         toJson(): string;
-        execute(): Promise<T[]>;
+        execute(): Promise<IElasticSearchResult<T>>;
         private getSearchRoot();
     }
     class ElasticFilter<T> extends ElasticTerminalFilter<T> implements IElasticFilter<T> {
@@ -113,20 +173,46 @@ declare module ElasticDsl {
         must(fn: IElasticFn<T>): IElasticBoolFilter<T>;
         mustnot(fn: IElasticFn<T>): IElasticBoolFilter<T>;
         should(fn: IElasticFn<T>): IElasticBoolFilter<T>;
+        compose(): any;
+        private checkSingleChild(filter);
     }
     class ElasticAndFilter<T> extends ElasticRootedFilter<T, ElasticAndFilter<T>> {
         conditions: ElasticAndFilter<T>[];
         constructor(parent?: ElasticFilter<T>, root?: ElasticAndFilter<T>);
         and(fn: IElasticFn<T>): IElasticFilter<T>;
+        compose(): any;
     }
     class ElasticOrFilter<T> extends ElasticRootedFilter<T, ElasticOrFilter<T>> {
         conditions: ElasticOrFilter<T>[];
         constructor(parent?: ElasticFilter<T>, root?: ElasticOrFilter<T>);
         or(fn: IElasticFn<T>): IElasticFilter<T>;
+        compose(): any;
     }
     class ElasticRawFilter<T> extends ElasticTerminalFilter<T> {
         rawObject: any;
         constructor(rawJson: any, parent?: ElasticFilter<T>);
+        compose(): any;
+    }
+    class ElasticAggregateResult implements IAggregationResult<any> {
+        name: string;
+        constructor(name: string);
+        read(result: IElasticSearchResult<any>): any;
+    }
+    class ElasticAggregation<T> implements IElasticAggregation<T> {
+        private name;
+        private localBucketFilter;
+        private children;
+        private aggObject;
+        constructor(name: string);
+        subAggregate(name: string): IElasticAggregation<T>;
+        bucketFilter(fn: IElasticFn<T>): IElasticAggregation<T>;
+        min(field: IElasticProp<T>): ISingleValueMetric<number>;
+        max(field: IElasticProp<T>): ISingleValueMetric<number>;
+        sum(field: IElasticProp<T>): ISingleValueMetric<number>;
+        avg(field: IElasticProp<T>): ISingleValueMetric<number>;
+        count(field: IElasticProp<T>): ISingleValueMetric<number>;
+        stats(field: IElasticProp<T>): IStatsResult;
+        extendedStats(field: IElasticProp<T>): IExtendedStatsResult;
         compose(): any;
     }
     interface ElasticComposerFn<T> {
@@ -144,17 +230,19 @@ declare module ElasticDsl {
     class ElasticSearch<T> implements IElasticSearch<T> {
         private elasticFilter;
         private elasticQuery;
+        private elasticAggregates;
         private size;
         private from;
         private sort;
         filter(fn: (filter: IElasticFilter<T>) => void): IElasticSearch<T>;
         query(fn: (query: IElasticQuery<T>) => void): IElasticSearch<T>;
+        aggregate(name: string, fn: (aggregate: IElasticAggregation<T>) => void): IElasticSearch<T>;
         take(amount: number): IElasticSearch<T>;
         skip(amount: number): IElasticSearch<T>;
         sortBy(field: IElasticProp<T>, ascending?: boolean): IElasticSearch<T>;
         sortByDesc(field: IElasticProp<T>): IElasticSearch<T>;
         compose(): any;
         toJson(): any;
-        execute(): Promise<T[]>;
+        execute(): Promise<IElasticSearchResult<T>>;
     }
 }
