@@ -1,6 +1,6 @@
 declare module ElasticDsl {
     interface IElasticFn<T> {
-        (fn: IElasticFilter<T>): IElasticTerminal<T>;
+        (fn: IElasticFilter<T>): IElasticTerminal<T> | void;
     }
     interface IElasticProp<T> {
         (it: T): any;
@@ -29,14 +29,15 @@ declare module ElasticDsl {
         execute(): Promise<IElasticSearchResult<T>>;
     }
     interface IElasticFilter<T> extends IElasticTerminal<T>, IElasticFilterBase {
-        and(fn: IElasticFn<T>): IElasticFilter<T>;
-        or(fn: IElasticFn<T>): IElasticFilter<T>;
+        and(): ElasticAndFilter<T>;
+        or(): ElasticOrFilter<T>;
         bool(): IElasticBoolFilter<T>;
         exists(field: IElasticProp<T>): IElasticTerminal<T>;
         ids(idList: any[]): IElasticTerminal<T>;
         limit(amount: number): IElasticTerminal<T>;
         matchAll(): IElasticTerminal<T>;
         missing(field: IElasticProp<T>): IElasticTerminal<T>;
+        nested<TNested>(prop: (it: T) => TNested[], nestFn: (nest: IElasticNestedFilter<TNested>) => any): IElasticFilter<T>;
         not(): IElasticFilter<T>;
         prefix(prop: IElasticProp<T>, prefix: string): IElasticTerminal<T>;
         query(cache?: boolean): IElasticQuery<T>;
@@ -46,12 +47,14 @@ declare module ElasticDsl {
         gt(field: IElasticProp<T>, gt: number): IElasticTerminal<T>;
         range(prop: IElasticProp<T>, lte?: number, lt?: number, gte?: number, gt?: number): IElasticTerminal<T>;
         regExp(prop: IElasticProp<T>, regex: string): IElasticTerminal<T>;
-        term(prop: IElasticProp<T>, term: string): IElasticTerminal<T>;
-        terms(prop: IElasticProp<T>, terms: string[]): IElasticTerminal<T>;
+        term(prop: IElasticProp<T>, term: any): IElasticTerminal<T>;
+        terms(prop: IElasticProp<T>, terms: any[]): IElasticTerminal<T>;
         wrap(): IElasticFilter<T>;
         raw(obj: any): IElasticTerminal<T>;
-        eq(prop: IElasticProp<T>, val: string): IElasticTerminal<T>;
+        eq(prop: IElasticProp<T>, val: any): IElasticTerminal<T>;
         searchRoot: IElasticSearch<T>;
+    }
+    interface IElasticNestedFilter<T> extends IElasticFilter<T> {
     }
     interface IElasticBoolFilter<T> extends IElasticFilter<T> {
         must(fn: IElasticFn<T>): IElasticBoolFilter<T>;
@@ -135,9 +138,10 @@ declare module ElasticDsl {
         children: IElasticTerminal<T>[];
         searchRoot: IElasticSearch<T>;
         constructor(parent?: ElasticFilter<T>);
+        nested<TNested>(field: (it: T) => TNested[], nestFn: (nest: IElasticNestedFilter<TNested>) => any): IElasticFilter<T>;
         wrap(): IElasticFilter<T>;
-        and(fn: IElasticFn<T>): IElasticFilter<T>;
-        or(fn: IElasticFn<T>): IElasticFilter<T>;
+        and(): ElasticAndFilter<T>;
+        or(): ElasticOrFilter<T>;
         bool(): IElasticBoolFilter<T>;
         exists(field: IElasticProp<T>): IElasticTerminal<T>;
         ids(idList: any[]): IElasticTerminal<T>;
@@ -153,13 +157,18 @@ declare module ElasticDsl {
         gte(field: IElasticProp<T>, gte: number): IElasticTerminal<T>;
         range(field: IElasticProp<T>, lte?: number, lt?: number, gte?: number, gt?: number): IElasticTerminal<T>;
         regExp(field: IElasticProp<T>, regex: string): IElasticTerminal<T>;
-        term(field: IElasticProp<T>, term: string): IElasticTerminal<T>;
-        terms(field: IElasticProp<T>, terms: string[]): IElasticTerminal<T>;
+        term(field: IElasticProp<T>, term: any): IElasticTerminal<T>;
+        terms(field: IElasticProp<T>, terms: any[]): IElasticTerminal<T>;
         raw(obj: any): ElasticRawFilter<T>;
-        eq(field: IElasticProp<T>, val: string): IElasticTerminal<T>;
+        eq(field: IElasticProp<T>, val: any): IElasticTerminal<T>;
         compose(): any;
         protected composeChildren(): any[];
         protected composeChild(): any;
+    }
+    class ElasticNestedFilter<T, TNested> extends ElasticFilter<TNested> implements IElasticNestedFilter<TNested> {
+        private path;
+        constructor(path: string, parent?: ElasticFilter<T>);
+        compose(): any;
     }
     class ElasticRootedFilter<T, TRoot> extends ElasticFilter<T> {
         root: TRoot;
@@ -176,16 +185,12 @@ declare module ElasticDsl {
         compose(): any;
         private checkSingleChild(filter);
     }
-    class ElasticAndFilter<T> extends ElasticRootedFilter<T, ElasticAndFilter<T>> {
-        conditions: ElasticAndFilter<T>[];
-        constructor(parent?: ElasticFilter<T>, root?: ElasticAndFilter<T>);
-        and(fn: IElasticFn<T>): IElasticFilter<T>;
+    class ElasticAndFilter<T> extends ElasticFilter<T> {
+        constructor(parent?: ElasticFilter<T>);
         compose(): any;
     }
-    class ElasticOrFilter<T> extends ElasticRootedFilter<T, ElasticOrFilter<T>> {
-        conditions: ElasticOrFilter<T>[];
+    class ElasticOrFilter<T> extends ElasticFilter<T> {
         constructor(parent?: ElasticFilter<T>, root?: ElasticOrFilter<T>);
-        or(fn: IElasticFn<T>): IElasticFilter<T>;
         compose(): any;
     }
     class ElasticRawFilter<T> extends ElasticTerminalFilter<T> {

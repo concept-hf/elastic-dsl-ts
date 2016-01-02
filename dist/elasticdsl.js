@@ -14,15 +14,7 @@ var ElasticDsl;
             }
         }
         ElasticTerminalFilter.prototype.back = function () {
-            var p = this.localParent;
-            while (p && !p.hasOwnProperty('root')) {
-                p = p.parent;
-            }
-            if (!p) {
-                throw new Error("Previous root not found!");
-            }
-            var rooted = p;
-            return rooted.root;
+            return this.localParent;
         };
         ElasticTerminalFilter.prototype.cast = function () {
             return this;
@@ -56,17 +48,21 @@ var ElasticDsl;
                 this.searchRoot = parent.searchRoot;
             }
         }
+        ElasticFilter.prototype.nested = function (field, nestFn) {
+            var prop = PropertyVisitor.getProperty(field.toString());
+            var nested = new ElasticNestedFilter(prop, this);
+            nestFn(nested);
+            return this;
+        };
         ElasticFilter.prototype.wrap = function () {
             return new ElasticFilter(this);
         };
-        ElasticFilter.prototype.and = function (fn) {
+        ElasticFilter.prototype.and = function () {
             var andFilter = new ElasticAndFilter(this);
-            fn(andFilter);
             return andFilter;
         };
-        ElasticFilter.prototype.or = function (fn) {
+        ElasticFilter.prototype.or = function () {
             var orFilter = new ElasticOrFilter(this);
-            fn(orFilter);
             return orFilter;
         };
         ElasticFilter.prototype.bool = function () {
@@ -171,6 +167,21 @@ var ElasticDsl;
         return ElasticFilter;
     })(ElasticTerminalFilter);
     ElasticDsl.ElasticFilter = ElasticFilter;
+    var ElasticNestedFilter = (function (_super) {
+        __extends(ElasticNestedFilter, _super);
+        function ElasticNestedFilter(path, parent) {
+            _super.call(this, parent);
+            this.path = path;
+        }
+        ElasticNestedFilter.prototype.compose = function () {
+            var result = {};
+            result["path"] = this.path;
+            result["filter"] = _super.prototype.compose.call(this);
+            return { "nested": result };
+        };
+        return ElasticNestedFilter;
+    })(ElasticFilter);
+    ElasticDsl.ElasticNestedFilter = ElasticNestedFilter;
     var ElasticRootedFilter = (function (_super) {
         __extends(ElasticRootedFilter, _super);
         function ElasticRootedFilter(parent, root) {
@@ -185,9 +196,10 @@ var ElasticDsl;
         function ElasticBoolFilter(parent, root) {
             _super.call(this, parent, root);
             if (root) {
-                this.mustFilter = new ElasticBoolFilter(this, root);
-                this.mustNotFilter = new ElasticBoolFilter(this, root);
-                this.shouldFilter = new ElasticBoolFilter(this, root);
+                this.mustFilter = root.mustFilter;
+                this.mustNotFilter = root.mustNotFilter;
+                this.shouldFilter = root.shouldFilter;
+                this.root = root;
             }
             else {
                 this.mustFilter = new ElasticBoolFilter(this, this);
@@ -197,38 +209,42 @@ var ElasticDsl;
             }
         }
         ElasticBoolFilter.prototype.must = function (fn) {
-            fn(this.root.mustFilter);
+            var filter = new ElasticFilter(this.root.mustFilter);
+            fn(filter);
             return this.root.mustFilter;
         };
         ElasticBoolFilter.prototype.mustnot = function (fn) {
-            fn(this.root.mustNotFilter);
+            var filter = new ElasticFilter(this.root.mustNotFilter);
+            fn(filter);
             return this.root.mustNotFilter;
         };
         ElasticBoolFilter.prototype.should = function (fn) {
-            fn(this.root.shouldFilter);
+            var filter = new ElasticFilter(this.root.shouldFilter);
+            fn(filter);
             return this.root.shouldFilter;
         };
         ElasticBoolFilter.prototype.compose = function () {
-            if (!this.root) {
+            if (this.root === this) {
                 var result = {};
-                if (this.mustFilter) {
+                if (this.mustFilter.children.length > 0) {
                     this.checkSingleChild(this.mustFilter);
                     result["must"] = this.mustFilter.children[0].compose();
                 }
-                if (this.mustNotFilter) {
-                    this.checkSingleChild(this.mustFilter);
-                    result["mustnot"] = this.mustNotFilter.children[0].compose();
+                if (this.mustNotFilter.children.length > 0) {
+                    this.checkSingleChild(this.mustNotFilter);
+                    result["must_not"] = this.mustNotFilter.children[0].compose();
                 }
-                if (this.shouldFilter) {
+                if (this.shouldFilter.children.length > 0) {
                     this.checkSingleChild(this.shouldFilter);
                     result["should"] = this.shouldFilter.children[0].compose();
                 }
+                return { 'bool': result };
             }
             throw new Error("Only root 'bool' filter is composable");
         };
         ElasticBoolFilter.prototype.checkSingleChild = function (filter) {
-            if (filter.children.length != 1) {
-                throw new Error("Filter should have exactly one child");
+            if (filter.children.length > 1) {
+                throw new Error("Filter should have at most one child");
             }
         };
         return ElasticBoolFilter;
@@ -236,71 +252,49 @@ var ElasticDsl;
     ElasticDsl.ElasticBoolFilter = ElasticBoolFilter;
     var ElasticAndFilter = (function (_super) {
         __extends(ElasticAndFilter, _super);
-        function ElasticAndFilter(parent, root) {
-            _super.call(this, parent, root);
-            this.conditions = [];
-            if (root) {
-                root.conditions.push(this);
-            }
-            else {
-                this.conditions.push(this);
-            }
+        function ElasticAndFilter(parent) {
+            _super.call(this, parent);
         }
-        ElasticAndFilter.prototype.and = function (fn) {
-            var andFilter = new ElasticAndFilter(this, this.root == null ? this : this.root);
-            fn(andFilter);
-            return andFilter;
-        };
         ElasticAndFilter.prototype.compose = function () {
-            if (!this.root) {
-                var childComposites = [];
-                this.conditions.forEach(function (d) {
-                    if (d.children.length == 1 && !(d.children[0] instanceof ElasticAndFilter)) {
-                        childComposites.push(d.children[0].compose());
-                    }
-                });
-                return {
-                    "and": childComposites
-                };
-            }
-            throw new Error("Only root 'and' filter is composable");
+            var conditions = [];
+            this.children.forEach(function (child) {
+                if (child instanceof ElasticAndFilter) {
+                    var composed = child.compose();
+                    composed.and.forEach(function (d) { return conditions.push(d); });
+                }
+                else {
+                    conditions.push(child.compose());
+                }
+            });
+            return {
+                "and": conditions
+            };
         };
         return ElasticAndFilter;
-    })(ElasticRootedFilter);
+    })(ElasticFilter);
     ElasticDsl.ElasticAndFilter = ElasticAndFilter;
     var ElasticOrFilter = (function (_super) {
         __extends(ElasticOrFilter, _super);
         function ElasticOrFilter(parent, root) {
-            _super.call(this, parent, root);
-            this.conditions = [];
-            if (root) {
-                root.conditions.push(this);
-            }
-            else {
-                this.conditions.push(this);
-            }
+            _super.call(this, parent);
         }
-        ElasticOrFilter.prototype.or = function (fn) {
-            var andFilter = new ElasticOrFilter(this, this.root == null ? this : this.root);
-            fn(andFilter);
-            return andFilter;
-        };
         ElasticOrFilter.prototype.compose = function () {
-            if (!this.root) {
-                var childComposites = [];
-                this.conditions.forEach(function (d) {
-                    if (d.children.length == 1 && !(d.children[0] instanceof ElasticOrFilter)) {
-                        childComposites.push(d.children[0].compose());
-                    }
-                });
-                return {
-                    "or": childComposites
-                };
-            }
-            throw new Error("Only root 'or' filter is composable");
+            var conditions = [];
+            this.children.forEach(function (child) {
+                if (child instanceof ElasticOrFilter) {
+                    var composed = child.compose();
+                    composed.or.map(function (d) { return conditions.push(d); });
+                }
+                else {
+                    conditions.push(child.compose());
+                }
+            });
+            return {
+                "or": conditions
+            };
         };
         return ElasticOrFilter;
-    })(ElasticRootedFilter);
+    })(ElasticFilter);
     ElasticDsl.ElasticOrFilter = ElasticOrFilter;
     var ElasticRawFilter = (function (_super) {
         __extends(ElasticRawFilter, _super);
@@ -336,7 +330,7 @@ var ElasticDsl;
             return agg;
         };
         ElasticAggregation.prototype.bucketFilter = function (fn) {
-            if (!this.bucketFilter) {
+            if (!this.localBucketFilter) {
                 this.localBucketFilter = new ElasticFilter();
             }
             fn(this.localBucketFilter);
@@ -379,8 +373,8 @@ var ElasticDsl;
         };
         ElasticAggregation.prototype.compose = function () {
             var res = {};
-            if (this.bucketFilter || this.children.size > 0) {
-                if (this.bucketFilter) {
+            if (this.localBucketFilter || this.children.size > 0) {
+                if (this.localBucketFilter) {
                     res["filter"] = this.localBucketFilter.compose();
                 }
                 if (this.children.size > 0) {
@@ -391,7 +385,7 @@ var ElasticDsl;
                 }
             }
             else {
-                res[this.name] = this.aggObject;
+                res = this.aggObject;
             }
             return res;
         };

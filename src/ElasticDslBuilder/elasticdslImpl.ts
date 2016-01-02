@@ -10,16 +10,7 @@
         }
 
         back(): IElasticFilter<T> {
-            var p = this.localParent;
-            while (p && !p.hasOwnProperty('root')) {
-                p = p.parent;
-            }
-            if (!p) {
-                throw new Error("Previous root not found!");
-            }
-            var rooted = <ElasticRootedFilter<T, ElasticFilter<T>>>p;
-            
-            return rooted.root;
+            return this.localParent;
         }
         
         cast<TCast extends ElasticTerminalFilter<T>>() {
@@ -59,23 +50,29 @@
             this.parent = parent;
             if (parent) {
                 this.searchRoot = parent.searchRoot;
-                // parent.children.push(this);
             }
+        }
+
+        nested<TNested>(
+            field: (it: T) => TNested[],
+            nestFn: (nest: IElasticNestedFilter<TNested>) => any): IElasticFilter<T> {
+            var prop = PropertyVisitor.getProperty((<any>field).toString());
+            var nested = new ElasticNestedFilter<T, TNested>(prop, this);
+            nestFn(nested);
+            return this;
         }
 
         wrap(): IElasticFilter<T> {
             return new ElasticFilter<T>(this);
         }
 
-        and(fn: IElasticFn<T>): IElasticFilter<T> {
+        and(): ElasticAndFilter<T> {
             var andFilter = new ElasticAndFilter<T>(this);
-            fn(andFilter);
             return andFilter;
         }
 
-        or(fn: IElasticFn<T>): IElasticFilter<T> {
+        or(): ElasticOrFilter<T> {
             var orFilter = new ElasticOrFilter<T>(this);
-            fn(orFilter);
             return orFilter;
         }
 
@@ -160,14 +157,14 @@
             return new ElasticRawFilter<T>(filter, this);
         }
 
-        term(field: IElasticProp<T>, term: string): IElasticTerminal<T> {
+        term(field: IElasticProp<T>, term: any): IElasticTerminal<T> {
             var prop = PropertyVisitor.getProperty((<any>field).toString());
             var filter = { "term": {} };
             filter["term"][prop] = term;
             return new ElasticRawFilter<T>(filter, this);
         }
 
-        terms(field: IElasticProp<T>, terms: string[]): IElasticTerminal<T> {
+        terms(field: IElasticProp<T>, terms: any[]): IElasticTerminal<T> {
             var prop = PropertyVisitor.getProperty((<any>field).toString());
             var filter = { "terms": {} };
             filter["terms"][prop] = terms;
@@ -178,7 +175,7 @@
             return new ElasticRawFilter<T>(obj, this);
         }
 
-        eq(field: IElasticProp<T>, val: string): IElasticTerminal<T> {
+        eq(field: IElasticProp<T>, val: any): IElasticTerminal<T> {
             return this.term(field, val);
         }
 
@@ -201,6 +198,23 @@
         }
     }
 
+    export class ElasticNestedFilter<T, TNested> extends ElasticFilter<TNested> implements IElasticNestedFilter<TNested>{
+        private path: string;
+
+        constructor(path: string, parent?: ElasticFilter<T>) {
+            // TODO: Remove this hack. Possibly by introducing a non-typed container interface
+            super(<any>parent);
+            this.path = path;
+        }
+
+        compose(): any {
+            var result = {};
+            result["path"] = this.path;
+            result["filter"] = super.compose();
+            return { "nested": result };
+        }
+    }
+
     export class ElasticRootedFilter<T, TRoot> extends ElasticFilter<T> {
         root: TRoot;
 
@@ -218,9 +232,10 @@
         constructor(parent?: ElasticFilter<T>, root?: ElasticBoolFilter<T>) {
             super(parent, root);
             if (root) {
-                this.mustFilter = new ElasticBoolFilter<T>(this, root);
-                this.mustNotFilter = new ElasticBoolFilter<T>(this, root);
-                this.shouldFilter = new ElasticBoolFilter<T>(this, root);
+                this.mustFilter = root.mustFilter;
+                this.mustNotFilter = root.mustNotFilter;
+                this.shouldFilter = root.shouldFilter;
+                this.root = root;
             } else {
                 this.mustFilter = new ElasticBoolFilter<T>(this, this);
                 this.mustNotFilter = new ElasticBoolFilter<T>(this, this);
@@ -230,116 +245,99 @@
         }
 
         must(fn: IElasticFn<T>): IElasticBoolFilter<T> {
-            fn(this.root.mustFilter);
+            var filter = new ElasticFilter<T>(this.root.mustFilter);
+            fn(filter);
             return this.root.mustFilter;
         }
 
         mustnot(fn: IElasticFn<T>): IElasticBoolFilter<T> {
-            fn(this.root.mustNotFilter);
+            var filter = new ElasticFilter<T>(this.root.mustNotFilter);
+            fn(filter);
             return this.root.mustNotFilter;
         }
 
         should(fn: IElasticFn<T>): IElasticBoolFilter<T> {
-            fn(this.root.shouldFilter);
+            var filter = new ElasticFilter<T>(this.root.shouldFilter);
+            fn(filter);
             return this.root.shouldFilter;
         }
 
         compose(): any {
-            if (!this.root) {
+            if (this.root === this) {
                 var result = {};
-                if (this.mustFilter) {
+                if (this.mustFilter.children.length > 0) {
                     this.checkSingleChild(this.mustFilter);
                     result["must"] = this.mustFilter.children[0].compose();
                 }
 
-                if (this.mustNotFilter) {
-                    this.checkSingleChild(this.mustFilter);
-                    result["mustnot"] = this.mustNotFilter.children[0].compose();
+                if (this.mustNotFilter.children.length > 0) {
+                    this.checkSingleChild(this.mustNotFilter);
+                    result["must_not"] = this.mustNotFilter.children[0].compose();
                 }
 
-                if (this.shouldFilter) {
+                if (this.shouldFilter.children.length > 0) {
                     this.checkSingleChild(this.shouldFilter);
                     result["should"] = this.shouldFilter.children[0].compose();
                 }
+
+                return { 'bool': result };
             }
 
             throw new Error("Only root 'bool' filter is composable");
         }
 
         private checkSingleChild(filter: ElasticBoolFilter<T>) {
-            if (filter.children.length != 1) {
-                throw new Error("Filter should have exactly one child");
+            if (filter.children.length > 1) {
+                throw new Error("Filter should have at most one child");
             }
         }
     }
 
-    export class ElasticAndFilter<T> extends ElasticRootedFilter<T, ElasticAndFilter<T>> {
-        conditions: ElasticAndFilter<T>[] = [];
+    export class ElasticAndFilter<T> extends ElasticFilter<T> {
 
-        constructor(parent?: ElasticFilter<T>, root?: ElasticAndFilter<T>) {
-            super(parent, root);
-            if (root) {
-                root.conditions.push(this);
-            } else {
-                this.conditions.push(this);
-            }
+        constructor(parent?: ElasticFilter<T>) {
+            super(parent);
         }
-
-        and(fn: IElasticFn<T>): IElasticFilter<T> {
-            var andFilter = new ElasticAndFilter<T>(this, this.root == null ? this : this.root);
-            fn(andFilter);
-            return andFilter;
-        }
-
+        
         compose(): any {
-            if (!this.root) {
-                var childComposites = []
-                this.conditions.forEach(d => {
-                    if (d.children.length == 1 && !(d.children[0] instanceof ElasticAndFilter)) {
-                        childComposites.push(d.children[0].compose());
-                    }
-                });
-                return {
-                    "and": childComposites
-                }
-            }
+            var conditions: any[] = [];
 
-            throw new Error("Only root 'and' filter is composable");
+            this.children.forEach(child => {
+                if (child instanceof ElasticAndFilter) {
+                    let composed: { and: any[] } = child.compose();
+                    composed.and.forEach(d => conditions.push(d));
+                } else {
+                    conditions.push(child.compose());
+                }
+            });
+
+            return {
+                "and": conditions
+            };
         }
     }
 
-    export class ElasticOrFilter<T> extends ElasticRootedFilter<T, ElasticOrFilter<T>> {
-        conditions: ElasticOrFilter<T>[] = [];
+    export class ElasticOrFilter<T> extends ElasticFilter<T> {
 
         constructor(parent?: ElasticFilter<T>, root?: ElasticOrFilter<T>) {
-            super(parent, root);
-            if (root) {
-                root.conditions.push(this);
-            } else {
-                this.conditions.push(this);
-            }
-        }
-
-        or(fn: IElasticFn<T>): IElasticFilter<T> {
-            var andFilter = new ElasticOrFilter<T>(this, this.root == null ? this : this.root);
-            fn(andFilter);
-            return andFilter;
+            super(parent);
         }
 
         compose(): any {
-            if (!this.root) {
-                var childComposites = []
-                this.conditions.forEach(d => {
-                    if (d.children.length == 1 && !(d.children[0] instanceof ElasticOrFilter)) {
-                        childComposites.push(d.children[0].compose());
-                    }
-                });
-                return {
-                    "or": childComposites
-                }
-            }
+            var conditions: any[] = [];
 
-            throw new Error("Only root 'or' filter is composable");
+            this.children.forEach(child => {
+                if (child instanceof ElasticOrFilter) {
+                    let composed: { or: any[] } = child.compose();
+                    composed.or.map(d => conditions.push(d));
+                } else {
+                    conditions.push(child.compose());
+                }
+            });
+
+            return {
+                "or": conditions
+            };
         }
     }
 
@@ -385,7 +383,7 @@
         }
 
         bucketFilter(fn: IElasticFn<T>): IElasticAggregation<T> {
-            if (!this.bucketFilter) {
+            if (!this.localBucketFilter) {
                 this.localBucketFilter = new ElasticFilter<T>();
             }
 
@@ -438,8 +436,8 @@
         
         compose(): any {
             var res = {};
-            if (this.bucketFilter || this.children.size > 0) {
-                if (this.bucketFilter) {
+            if (this.localBucketFilter || this.children.size > 0) {
+                if (this.localBucketFilter) {
                     res["filter"] = this.localBucketFilter.compose();
                 }
                 if (this.children.size > 0) {
@@ -449,7 +447,7 @@
                     });
                 }
             } else {
-                res[this.name] = this.aggObject;
+                res = this.aggObject;
             }
 
             return res;
