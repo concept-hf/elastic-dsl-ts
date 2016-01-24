@@ -1,8 +1,7 @@
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
-    __.prototype = b.prototype;
-    d.prototype = new __();
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 };
 var ElasticDsl;
 (function (ElasticDsl) {
@@ -36,7 +35,6 @@ var ElasticDsl;
         };
         return ElasticTerminalFilter;
     })();
-    ElasticDsl.ElasticTerminalFilter = ElasticTerminalFilter;
     var ElasticFilter = (function (_super) {
         __extends(ElasticFilter, _super);
         function ElasticFilter(parent) {
@@ -166,7 +164,6 @@ var ElasticDsl;
         };
         return ElasticFilter;
     })(ElasticTerminalFilter);
-    ElasticDsl.ElasticFilter = ElasticFilter;
     var ElasticNestedFilter = (function (_super) {
         __extends(ElasticNestedFilter, _super);
         function ElasticNestedFilter(path, parent) {
@@ -181,7 +178,6 @@ var ElasticDsl;
         };
         return ElasticNestedFilter;
     })(ElasticFilter);
-    ElasticDsl.ElasticNestedFilter = ElasticNestedFilter;
     var ElasticRootedFilter = (function (_super) {
         __extends(ElasticRootedFilter, _super);
         function ElasticRootedFilter(parent, root) {
@@ -190,7 +186,6 @@ var ElasticDsl;
         }
         return ElasticRootedFilter;
     })(ElasticFilter);
-    ElasticDsl.ElasticRootedFilter = ElasticRootedFilter;
     var ElasticBoolFilter = (function (_super) {
         __extends(ElasticBoolFilter, _super);
         function ElasticBoolFilter(parent, root) {
@@ -249,7 +244,6 @@ var ElasticDsl;
         };
         return ElasticBoolFilter;
     })(ElasticRootedFilter);
-    ElasticDsl.ElasticBoolFilter = ElasticBoolFilter;
     var ElasticAndFilter = (function (_super) {
         __extends(ElasticAndFilter, _super);
         function ElasticAndFilter(parent) {
@@ -272,7 +266,6 @@ var ElasticDsl;
         };
         return ElasticAndFilter;
     })(ElasticFilter);
-    ElasticDsl.ElasticAndFilter = ElasticAndFilter;
     var ElasticOrFilter = (function (_super) {
         __extends(ElasticOrFilter, _super);
         function ElasticOrFilter(parent, root) {
@@ -295,7 +288,6 @@ var ElasticDsl;
         };
         return ElasticOrFilter;
     })(ElasticFilter);
-    ElasticDsl.ElasticOrFilter = ElasticOrFilter;
     var ElasticRawFilter = (function (_super) {
         __extends(ElasticRawFilter, _super);
         function ElasticRawFilter(rawJson, parent) {
@@ -307,7 +299,6 @@ var ElasticDsl;
         };
         return ElasticRawFilter;
     })(ElasticTerminalFilter);
-    ElasticDsl.ElasticRawFilter = ElasticRawFilter;
     var ElasticAggregateResult = (function () {
         function ElasticAggregateResult(name) {
             this.name = name;
@@ -317,7 +308,6 @@ var ElasticDsl;
         };
         return ElasticAggregateResult;
     })();
-    ElasticDsl.ElasticAggregateResult = ElasticAggregateResult;
     var ElasticAggregation = (function () {
         function ElasticAggregation(name) {
             this.children = new Map();
@@ -391,7 +381,6 @@ var ElasticDsl;
         };
         return ElasticAggregation;
     })();
-    ElasticDsl.ElasticAggregation = ElasticAggregation;
     var ElasticDirectComposited = (function (_super) {
         __extends(ElasticDirectComposited, _super);
         function ElasticDirectComposited(compositor, parent) {
@@ -403,7 +392,6 @@ var ElasticDsl;
         };
         return ElasticDirectComposited;
     })(ElasticFilter);
-    ElasticDsl.ElasticDirectComposited = ElasticDirectComposited;
     var ElasticQuery = (function () {
         function ElasticQuery() {
         }
@@ -415,7 +403,6 @@ var ElasticDsl;
         };
         return ElasticQuery;
     })();
-    ElasticDsl.ElasticQuery = ElasticQuery;
     var ElasticSearch = (function () {
         function ElasticSearch() {
             this.elasticAggregates = new Map();
@@ -619,8 +606,8 @@ var ElasticDsl;
         };
         PropertyVisitor.prototype.visitMember = function (node) {
             var propAsId = node.property;
-            this.property = this.property + '.' + propAsId.name;
             this.visit(node.object);
+            this.property = this.property + '.' + propAsId.name;
             return "";
         };
         return PropertyVisitor;

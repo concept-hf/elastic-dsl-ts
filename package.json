@@ -1,6 +1,6 @@
 {
   "name": "elastic-dsl-ts",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Simple elastic search dsl builder",
   "main": "elasticdsl.js",
   "scripts": {
@@ -25,7 +25,10 @@
     "esprima": "^2.5.0"
   },
   "devDependencies": {
-    "gulp-typescript": "^2.8.1"
+    "gulp": "^3.9.0",
+    "gulp-sourcemaps": "^1.6.0",
+    "gulp-typescript": "^2.10.0",
+    "merge2": "^1.0.0"
   },
   "jspm": {
     "directories": {

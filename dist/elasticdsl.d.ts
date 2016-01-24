@@ -29,8 +29,8 @@ declare module ElasticDsl {
         execute(): Promise<IElasticSearchResult<T>>;
     }
     interface IElasticFilter<T> extends IElasticTerminal<T>, IElasticFilterBase {
-        and(): ElasticAndFilter<T>;
-        or(): ElasticOrFilter<T>;
+        and(): IElasticAndFilter<T>;
+        or(): IElasticOrFilter<T>;
         bool(): IElasticBoolFilter<T>;
         exists(field: IElasticProp<T>): IElasticTerminal<T>;
         ids(idList: any[]): IElasticTerminal<T>;
@@ -120,117 +120,9 @@ declare module ElasticDsl {
         };
         aggregations: any;
     }
-}
-declare module ElasticDsl {
-    class ElasticTerminalFilter<T> implements IElasticTerminal<T> {
-        private localParent;
-        constructor(parent?: ElasticFilter<T>);
-        back(): IElasticFilter<T>;
-        cast<TCast extends ElasticTerminalFilter<T>>(): TCast;
-        compose(): any;
-        toJson(): string;
-        execute(): Promise<IElasticSearchResult<T>>;
-        private getSearchRoot();
+    interface IElasticAndFilter<T> extends IElasticFilter<T> {
     }
-    class ElasticFilter<T> extends ElasticTerminalFilter<T> implements IElasticFilter<T> {
-        parent: ElasticFilter<T>;
-        siblings: ElasticFilter<T>[];
-        children: IElasticTerminal<T>[];
-        searchRoot: IElasticSearch<T>;
-        constructor(parent?: ElasticFilter<T>);
-        nested<TNested>(field: (it: T) => TNested[], nestFn: (nest: IElasticNestedFilter<TNested>) => any): IElasticFilter<T>;
-        wrap(): IElasticFilter<T>;
-        and(): ElasticAndFilter<T>;
-        or(): ElasticOrFilter<T>;
-        bool(): IElasticBoolFilter<T>;
-        exists(field: IElasticProp<T>): IElasticTerminal<T>;
-        ids(idList: any[]): IElasticTerminal<T>;
-        limit(amount: number): IElasticTerminal<T>;
-        matchAll(): IElasticTerminal<T>;
-        missing(field: IElasticProp<T>): IElasticTerminal<T>;
-        not(): IElasticFilter<T>;
-        prefix(field: IElasticProp<T>, prefix: string): ElasticRawFilter<T>;
-        query(cache?: boolean): IElasticQuery<T>;
-        lte(field: IElasticProp<T>, lte: number): IElasticTerminal<T>;
-        lt(field: IElasticProp<T>, lt: number): IElasticTerminal<T>;
-        gt(field: IElasticProp<T>, gt: number): IElasticTerminal<T>;
-        gte(field: IElasticProp<T>, gte: number): IElasticTerminal<T>;
-        range(field: IElasticProp<T>, lte?: number, lt?: number, gte?: number, gt?: number): IElasticTerminal<T>;
-        regExp(field: IElasticProp<T>, regex: string): IElasticTerminal<T>;
-        term(field: IElasticProp<T>, term: any): IElasticTerminal<T>;
-        terms(field: IElasticProp<T>, terms: any[]): IElasticTerminal<T>;
-        raw(obj: any): ElasticRawFilter<T>;
-        eq(field: IElasticProp<T>, val: any): IElasticTerminal<T>;
-        compose(): any;
-        protected composeChildren(): any[];
-        protected composeChild(): any;
-    }
-    class ElasticNestedFilter<T, TNested> extends ElasticFilter<TNested> implements IElasticNestedFilter<TNested> {
-        private path;
-        constructor(path: string, parent?: ElasticFilter<T>);
-        compose(): any;
-    }
-    class ElasticRootedFilter<T, TRoot> extends ElasticFilter<T> {
-        root: TRoot;
-        constructor(parent?: ElasticFilter<T>, root?: TRoot);
-    }
-    class ElasticBoolFilter<T> extends ElasticRootedFilter<T, ElasticBoolFilter<T>> implements IElasticBoolFilter<T> {
-        mustFilter: ElasticBoolFilter<T>;
-        mustNotFilter: ElasticBoolFilter<T>;
-        shouldFilter: ElasticBoolFilter<T>;
-        constructor(parent?: ElasticFilter<T>, root?: ElasticBoolFilter<T>);
-        must(fn: IElasticFn<T>): IElasticBoolFilter<T>;
-        mustnot(fn: IElasticFn<T>): IElasticBoolFilter<T>;
-        should(fn: IElasticFn<T>): IElasticBoolFilter<T>;
-        compose(): any;
-        private checkSingleChild(filter);
-    }
-    class ElasticAndFilter<T> extends ElasticFilter<T> {
-        constructor(parent?: ElasticFilter<T>);
-        compose(): any;
-    }
-    class ElasticOrFilter<T> extends ElasticFilter<T> {
-        constructor(parent?: ElasticFilter<T>, root?: ElasticOrFilter<T>);
-        compose(): any;
-    }
-    class ElasticRawFilter<T> extends ElasticTerminalFilter<T> {
-        rawObject: any;
-        constructor(rawJson: any, parent?: ElasticFilter<T>);
-        compose(): any;
-    }
-    class ElasticAggregateResult implements IAggregationResult<any> {
-        name: string;
-        constructor(name: string);
-        read(result: IElasticSearchResult<any>): any;
-    }
-    class ElasticAggregation<T> implements IElasticAggregation<T> {
-        private name;
-        private localBucketFilter;
-        private children;
-        private aggObject;
-        constructor(name: string);
-        subAggregate(name: string): IElasticAggregation<T>;
-        bucketFilter(fn: IElasticFn<T>): IElasticAggregation<T>;
-        min(field: IElasticProp<T>): ISingleValueMetric<number>;
-        max(field: IElasticProp<T>): ISingleValueMetric<number>;
-        sum(field: IElasticProp<T>): ISingleValueMetric<number>;
-        avg(field: IElasticProp<T>): ISingleValueMetric<number>;
-        count(field: IElasticProp<T>): ISingleValueMetric<number>;
-        stats(field: IElasticProp<T>): IStatsResult;
-        extendedStats(field: IElasticProp<T>): IExtendedStatsResult;
-        compose(): any;
-    }
-    interface ElasticComposerFn<T> {
-        (compositor: ElasticDirectComposited<T>): any;
-    }
-    class ElasticDirectComposited<T> extends ElasticFilter<T> {
-        compositor: ElasticComposerFn<T>;
-        constructor(compositor: ElasticComposerFn<T>, parent?: ElasticFilter<T>);
-        composite(): any;
-    }
-    class ElasticQuery<T> implements IElasticQuery<T> {
-        toJson(): any;
-        compose(): any;
+    interface IElasticOrFilter<T> extends IElasticFilter<T> {
     }
     class ElasticSearch<T> implements IElasticSearch<T> {
         private elasticFilter;
