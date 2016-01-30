@@ -3,6 +3,10 @@
 // Definitions by: RReverser <https://github.com/RReverser>
 // Definitions: https://github.com/borisyankov/DefinitelyTyped
 
+declare module 'ESTree' {
+    export = ESTree;
+}
+
 declare module ESTree {
   interface Node {
     type: string;

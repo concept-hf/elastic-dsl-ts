@@ -1,4 +1,4 @@
-﻿module ElasticDsl {
+﻿import esprima = require('esprima');
 
 export interface IElasticFn<T> {
     (fn: IElasticFilter<T>): IElasticTerminal<T> | void;
@@ -26,7 +26,6 @@ export interface IElasticSearch<T> {
 }
 
 export interface IElasticFilterBase {
-
 }
 
 export interface IElasticTerminal<T> {
@@ -872,4 +871,3 @@ class PropertyVisitor extends AstVisitor {
         return "";
     }
 }
- }

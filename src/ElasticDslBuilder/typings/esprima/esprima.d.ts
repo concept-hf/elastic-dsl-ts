@@ -5,6 +5,10 @@
 
 /// <reference path="../estree/estree.d.ts" />
 
+declare module 'esprima' {
+    export = esprima;
+}
+
 declare module esprima {
 
     const version: string;
@@ -99,8 +103,4 @@ declare module esprima {
         YieldExpression: string
     };
 
-}
-
-declare module "esprima" {
-    export = esprima
 }
